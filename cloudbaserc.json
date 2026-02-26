@@ -1,0 +1,24 @@
+{
+  "envId": "family-study-1ge93s97246b2fa1",
+  "functionRoot": "./cloudfunctions",
+  "functions": [
+    {
+      "name": "family-study-api",
+      "timeout": 60,
+      "runtime": "Nodejs18.15",
+      "handler": "index.main",
+      "memorySize": 256,
+      "installDependency": true,
+      "events": [
+        {
+          "name": "http",
+          "type": "http",
+          "config": {
+            "method": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            "path": "/api"
+          }
+        }
+      ]
+    }
+  ]
+}

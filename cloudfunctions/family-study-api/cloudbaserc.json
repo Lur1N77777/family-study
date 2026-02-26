@@ -1,0 +1,12 @@
+{
+  "name": "family-study-api",
+  "version": "1.0.0",
+  "main": "index.js",
+  "runtime": "Nodejs18.15",
+  "timeout": 60,
+  "handler": "index.main",
+  "memorySize": 256,
+  "installDependency": true,
+  "httpHttpPath": "/api",
+  "envId": "family-study-1ge93s97246b2fa1"
+}
