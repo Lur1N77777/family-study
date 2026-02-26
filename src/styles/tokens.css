@@ -1,0 +1,127 @@
+/* ========================================
+   Design Tokens — 家庭学习监督系统
+   Apple-inspired minimalist design system
+   ======================================== */
+
+:root {
+  /* ── 主色调（低饱和度冷蓝） ── */
+  --color-primary: #4A7DFF;
+  --color-primary-soft: rgba(74, 125, 255, 0.12);
+  --color-primary-hover: #3A6AE8;
+  --color-primary-active: #2E5AD4;
+
+  /* ── 语义色 ── */
+  --color-success: #34C759;
+  --color-success-soft: rgba(52, 199, 89, 0.12);
+  --color-warning: #FF9500;
+  --color-warning-soft: rgba(255, 149, 0, 0.12);
+  --color-danger: #FF3B30;
+  --color-danger-soft: rgba(255, 59, 48, 0.12);
+
+  /* ── 中性色 ── */
+  --color-bg: #F5F5F7;
+  --color-surface: #FFFFFF;
+  --color-surface-elevated: #FFFFFF;
+  --color-border: rgba(0, 0, 0, 0.06);
+  --color-divider: rgba(0, 0, 0, 0.04);
+
+  /* ── 文字色 ── */
+  --color-text-primary: #1D1D1F;
+  --color-text-secondary: #6E6E73;
+  --color-text-tertiary: #AEAEB2;
+  --color-text-inverse: #FFFFFF;
+
+  /* ── 字体 ── */
+  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
+    'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'SF Mono', 'Menlo', 'Monaco', monospace;
+
+  /* ── 字体大小 ── */
+  --text-xs: 0.6875rem;   /* 11px */
+  --text-sm: 0.8125rem;   /* 13px */
+  --text-base: 0.9375rem; /* 15px */
+  --text-md: 1.0625rem;   /* 17px */
+  --text-lg: 1.25rem;     /* 20px */
+  --text-xl: 1.5rem;      /* 24px */
+  --text-2xl: 1.75rem;    /* 28px */
+  --text-3xl: 2.125rem;   /* 34px */
+  --text-hero: 3rem;      /* 48px */
+
+  /* ── 字重 ── */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ── 间距（4px 基准） ── */
+  --space-1: 0.25rem;  /* 4px */
+  --space-2: 0.5rem;   /* 8px */
+  --space-3: 0.75rem;  /* 12px */
+  --space-4: 1rem;     /* 16px */
+  --space-5: 1.25rem;  /* 20px */
+  --space-6: 1.5rem;   /* 24px */
+  --space-8: 2rem;     /* 32px */
+  --space-10: 2.5rem;  /* 40px */
+  --space-12: 3rem;    /* 48px */
+  --space-16: 4rem;    /* 64px */
+
+  /* ── 圆角 ── */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 24px;
+  --radius-full: 9999px;
+
+  /* ── 阴影 ── */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 4px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.10), 0 4px 16px rgba(0, 0, 0, 0.05);
+
+  /* ── 毛玻璃 ── */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-blur: blur(20px) saturate(180%);
+  --glass-border: rgba(255, 255, 255, 0.5);
+
+  /* ── 过渡 ── */
+  --ease-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
+  --duration-page: 500ms;
+
+  /* ── 安全区域 ── */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  /* ── 底部导航高度 ── */
+  --nav-height: 56px;
+  --nav-height-safe: calc(56px + var(--safe-bottom));
+}
+
+/* ── 深色主题 ── */
+[data-theme="dark"] {
+  --color-bg: #000000;
+  --color-surface: #1C1C1E;
+  --color-surface-elevated: #2C2C2E;
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-divider: rgba(255, 255, 255, 0.05);
+
+  --color-text-primary: #F5F5F7;
+  --color-text-secondary: #98989D;
+  --color-text-tertiary: #636366;
+  --color-text-inverse: #1D1D1F;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.5);
+
+  --glass-bg: rgba(28, 28, 30, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.08);
+}
