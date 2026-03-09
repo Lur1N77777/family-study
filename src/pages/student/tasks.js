@@ -14,6 +14,8 @@ import { api } from '../../utils/api.js';
 import { canPreviewReviewedSubmissionPhotos, getSubmissionPhotoKeys, getSubmissionPhotoState } from '../../utils/submission-photos.js';
 import { escapeHtml } from '../../utils/escape.js';
 import {
+  cancelExpandableAnimations,
+  queueExpandableFrame,
   registerCollapseTransitionEnd,
   registerExpandTransitionEnd,
 } from '../../utils/expandable-transition.js';
@@ -690,13 +692,16 @@ export async function renderStudentTasks(container) {
         const id = row.dataset.toggle;
         const card = row.closest('.task-compact');
         const detail = card.querySelector('.task-compact-detail');
+        const computed = window.getComputedStyle(detail);
 
         if (expandedId === id) {
           // 閺€鎯版崳瑜版挸澧犻崡锛勫
           expandedId = null;
+          cancelExpandableAnimations(detail);
           card.classList.remove('expanded');
-          detail.style.maxHeight = detail.scrollHeight + 'px';
-          requestAnimationFrame(() => {
+          detail.style.maxHeight = `${detail.offsetHeight || detail.scrollHeight}px`;
+          detail.style.paddingBottom = computed.paddingBottom === '0px' ? '0' : computed.paddingBottom;
+          queueExpandableFrame(detail, () => {
             detail.style.maxHeight = '0';
             detail.style.paddingBottom = '0';
           });
@@ -704,8 +709,10 @@ export async function renderStudentTasks(container) {
           // 閺€鎯版崳瀹告彃鐫嶅鈧惃鍕幢閻?
           container.querySelectorAll('.task-compact.expanded').forEach(c => {
             const d = c.querySelector('.task-compact-detail');
-            d.style.maxHeight = d.scrollHeight + 'px';
-            requestAnimationFrame(() => {
+            cancelExpandableAnimations(d);
+            d.style.maxHeight = `${d.offsetHeight || d.scrollHeight}px`;
+            d.style.paddingBottom = window.getComputedStyle(d).paddingBottom;
+            queueExpandableFrame(d, () => {
               d.style.maxHeight = '0';
               d.style.paddingBottom = '0';
             });
@@ -713,9 +720,14 @@ export async function renderStudentTasks(container) {
           });
           // 鐏炴洖绱戦弬鏉垮幢閻?
           expandedId = id;
+          cancelExpandableAnimations(detail);
           card.classList.add('expanded');
-          detail.style.paddingBottom = 'var(--space-3)';
-          detail.style.maxHeight = detail.scrollHeight + 'px';
+          detail.style.maxHeight = `${detail.offsetHeight}px`;
+          detail.style.paddingBottom = computed.paddingBottom === '0px' ? '0' : computed.paddingBottom;
+          queueExpandableFrame(detail, () => {
+            detail.style.paddingBottom = 'var(--space-3)';
+            detail.style.maxHeight = `${detail.scrollHeight}px`;
+          });
           registerExpandTransitionEnd(detail, () => card.classList.contains('expanded'));
         }
       };
@@ -832,17 +844,19 @@ export async function renderStudentTasks(container) {
     const detail = card.querySelector('.student-record-detail');
     if (!detail) return;
 
+    cancelExpandableAnimations(detail);
     detail.hidden = false;
-    detail.style.maxHeight = '0';
-    detail.style.paddingTop = '0';
-    detail.style.paddingBottom = '0';
-    detail.style.opacity = '0';
-    detail.style.transform = 'translateY(-6px)';
+    const computed = window.getComputedStyle(detail);
+    detail.style.maxHeight = `${detail.offsetHeight}px`;
+    detail.style.paddingTop = computed.paddingTop === '0px' ? '0' : computed.paddingTop;
+    detail.style.paddingBottom = computed.paddingBottom === '0px' ? '0' : computed.paddingBottom;
+    detail.style.opacity = computed.opacity;
+    detail.style.transform = computed.transform !== 'none' ? computed.transform : 'translateY(-6px)';
     detail.style.pointerEvents = 'none';
 
     card.classList.add('expanded');
 
-    requestAnimationFrame(() => {
+    queueExpandableFrame(detail, () => {
       detail.style.paddingTop = '6px';
       detail.style.paddingBottom = '16px';
       const targetHeight = detail.scrollHeight;
@@ -861,13 +875,14 @@ export async function renderStudentTasks(container) {
     const detail = card.querySelector('.student-record-detail');
     if (!detail) return;
 
+    cancelExpandableAnimations(detail);
     detail.hidden = false;
-    detail.style.maxHeight = `${detail.scrollHeight}px`;
-    detail.style.opacity = '1';
+    detail.style.maxHeight = `${detail.offsetHeight || detail.scrollHeight}px`;
+    detail.style.opacity = window.getComputedStyle(detail).opacity;
     detail.style.transform = 'translateY(0)';
     detail.style.pointerEvents = 'auto';
 
-    requestAnimationFrame(() => {
+    queueExpandableFrame(detail, () => {
       card.classList.remove('expanded');
       detail.style.maxHeight = '0';
       detail.style.paddingTop = '0';

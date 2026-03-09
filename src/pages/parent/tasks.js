@@ -5,6 +5,11 @@ import { toast } from '../../utils/notification.js';
 import { staggerIn, haptic } from '../../utils/animations.js';
 import { showBottomNav } from '../../utils/nav.js';
 import { escapeHtml } from '../../utils/escape.js';
+import {
+  cancelExpandableAnimations,
+  queueExpandableFrame,
+  registerHeightTransitionEnd,
+} from '../../utils/expandable-transition.js';
 
 const TASK_TYPES = ['all', 'daily', 'weekly', 'once', 'semester'];
 
@@ -272,48 +277,54 @@ export async function renderParentTasks(container) {
     const detail = card.querySelector('.task-detail');
     if (!panel || !detail) return;
 
+    cancelExpandableAnimations(panel);
+
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      panel.style.willChange = '';
       panel.style.height = expanded ? 'auto' : '0px';
       panel.style.opacity = expanded ? '1' : '0';
       panel.style.transform = expanded ? 'translateY(0)' : 'translateY(-10px)';
       return;
     }
 
+    const computed = window.getComputedStyle(panel);
+    const currentHeight = panel.style.height === 'auto'
+      ? detail.scrollHeight
+      : panel.offsetHeight;
+
     panel.style.willChange = 'height, opacity, transform';
+    panel.style.height = `${currentHeight}px`;
+    panel.style.opacity = computed.opacity;
+    panel.style.transform = computed.transform !== 'none'
+      ? computed.transform
+      : (expanded ? 'translateY(-10px)' : 'translateY(0)');
 
     if (expanded) {
-      panel.style.height = '0px';
-      panel.style.opacity = '0';
-      panel.style.transform = 'translateY(-10px)';
-
-      requestAnimationFrame(() => {
+      queueExpandableFrame(panel, () => {
         panel.style.height = `${detail.scrollHeight}px`;
         panel.style.opacity = '1';
         panel.style.transform = 'translateY(0)';
       });
     } else {
-      const currentHeight = panel.style.height === 'auto' ? `${detail.scrollHeight}px` : `${panel.offsetHeight}px`;
-      panel.style.height = currentHeight;
-      panel.style.opacity = '1';
-      panel.style.transform = 'translateY(0)';
-
-      requestAnimationFrame(() => {
+      queueExpandableFrame(panel, () => {
         panel.style.height = '0px';
         panel.style.opacity = '0';
         panel.style.transform = 'translateY(-10px)';
       });
     }
 
-    const onTransitionEnd = (event) => {
-      if (event.propertyName !== 'height') return;
-      panel.removeEventListener('transitionend', onTransitionEnd);
+    registerHeightTransitionEnd(panel, () => {
       panel.style.willChange = '';
-      if (expanded) {
+      if (card.classList.contains('is-expanded')) {
         panel.style.height = 'auto';
+        panel.style.opacity = '1';
+        panel.style.transform = 'translateY(0)';
+      } else {
+        panel.style.height = '0px';
+        panel.style.opacity = '0';
+        panel.style.transform = 'translateY(-10px)';
       }
-    };
-
-    panel.addEventListener('transitionend', onTransitionEnd);
+    });
   }
 
   function openTaskModal(task = null) {

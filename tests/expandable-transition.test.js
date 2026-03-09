@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cancelExpandableAnimations,
   registerCollapseTransitionEnd,
   registerExpandTransitionEnd,
+  registerHeightTransitionEnd,
 } from '../src/utils/expandable-transition.js';
 
 describe('expandable transition helpers', () => {
@@ -31,6 +33,28 @@ describe('expandable transition helpers', () => {
 
     detail.emit('transitionend', { propertyName: 'max-height' });
     expect(detail.hidden).toBe(true);
+    expect(detail.hasListener('transitionend')).toBe(false);
+  });
+
+  it('lets the latest height transition handler win during rapid retoggles', () => {
+    const detail = createMockDetail();
+    const calls = [];
+
+    registerHeightTransitionEnd(detail, () => calls.push('first'));
+    registerHeightTransitionEnd(detail, () => calls.push('second'));
+
+    detail.emit('transitionend', { propertyName: 'height' });
+    expect(calls).toEqual(['second']);
+    expect(detail.hasListener('transitionend')).toBe(false);
+  });
+
+  it('cancels pending listeners explicitly', () => {
+    const detail = createMockDetail();
+
+    registerExpandTransitionEnd(detail, () => true);
+    expect(detail.hasListener('transitionend')).toBe(true);
+
+    cancelExpandableAnimations(detail);
     expect(detail.hasListener('transitionend')).toBe(false);
   });
 });

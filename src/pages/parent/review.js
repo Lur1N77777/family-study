@@ -8,6 +8,8 @@ import { canPreviewReviewedSubmissionPhotos, getSubmissionPhotoKeys, getSubmissi
 import { showBottomNav, refreshNavBadge } from '../../utils/nav.js';
 import { escapeHtml } from '../../utils/escape.js';
 import {
+  cancelExpandableAnimations,
+  queueExpandableFrame,
   registerCollapseTransitionEnd,
   registerExpandTransitionEnd,
 } from '../../utils/expandable-transition.js';
@@ -825,18 +827,20 @@ export async function renderParentReview(container) {
     const detail = card.querySelector('.record-photo-detail');
     if (!detail) return;
 
+    cancelExpandableAnimations(detail);
     detail.hidden = false;
-    detail.style.maxHeight = '0';
-    detail.style.paddingTop = '0';
-    detail.style.paddingBottom = '0';
-    detail.style.opacity = '0';
-    detail.style.transform = 'translateY(-6px)';
+    const computed = window.getComputedStyle(detail);
+    detail.style.maxHeight = `${detail.offsetHeight}px`;
+    detail.style.paddingTop = computed.paddingTop === '0px' ? '0' : computed.paddingTop;
+    detail.style.paddingBottom = computed.paddingBottom === '0px' ? '0' : computed.paddingBottom;
+    detail.style.opacity = computed.opacity;
+    detail.style.transform = computed.transform !== 'none' ? computed.transform : 'translateY(-6px)';
     detail.style.pointerEvents = 'none';
 
     card.classList.add('expanded');
     syncRecordToggle(card, true);
 
-    requestAnimationFrame(() => {
+    queueExpandableFrame(detail, () => {
       detail.style.paddingTop = '10px';
       detail.style.paddingBottom = '14px';
       detail.style.maxHeight = `${detail.scrollHeight}px`;
@@ -853,13 +857,14 @@ export async function renderParentReview(container) {
     const detail = card.querySelector('.record-photo-detail');
     if (!detail) return;
 
+    cancelExpandableAnimations(detail);
     detail.hidden = false;
-    detail.style.maxHeight = `${detail.scrollHeight}px`;
-    detail.style.opacity = '1';
+    detail.style.maxHeight = `${detail.offsetHeight || detail.scrollHeight}px`;
+    detail.style.opacity = window.getComputedStyle(detail).opacity;
     detail.style.transform = 'translateY(0)';
     detail.style.pointerEvents = 'auto';
 
-    requestAnimationFrame(() => {
+    queueExpandableFrame(detail, () => {
       card.classList.remove('expanded');
       syncRecordToggle(card, false);
       detail.style.maxHeight = '0';
