@@ -16,6 +16,8 @@ export function jsonResponse(data, env, status = 200) {
         status,
         headers: {
             'Content-Type': 'application/json',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            'Vary': 'Authorization',
             ...corsHeaders(env),
         },
     });

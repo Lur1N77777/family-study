@@ -62,6 +62,44 @@ function verifyJWT(token) {
   }
 }
 
+function findUserById(userId) {
+  return db.users.find(user => user.id === userId) || null;
+}
+
+function normalizeTask(task) {
+  const targetChildId = task.target_child_id ?? task.assigneeId ?? null;
+  return {
+    ...task,
+    target_child_id: targetChildId,
+    assigneeId: targetChildId,
+  };
+}
+
+function normalizeSubmission(submission) {
+  return {
+    ...submission,
+    task_id: submission.taskId,
+    child_name: submission.childName,
+    child_avatar: submission.childAvatar,
+    task_title: submission.taskTitle,
+    task_points: submission.taskPoints,
+    photo_key: submission.photoKey,
+    reject_reason: submission.rejectReason,
+    created_at: submission.createdAt,
+    reviewed_at: submission.reviewedAt,
+  };
+}
+
+function normalizeRedemption(redemption) {
+  return {
+    ...redemption,
+    product_name: redemption.productName,
+    product_emoji: redemption.productEmoji,
+    child_name: redemption.childName,
+    created_at: redemption.createdAt,
+  };
+}
+
 // 路由
 app.use((req, res, next) => {
   const path = req.path;
@@ -88,11 +126,11 @@ app.use((req, res, next) => {
 });
 
 // 认证
-async function handleAuth(req, res) {
+function handleAuth(req, res) {
   const { method, body, path } = req;
 
   if (path === '/api/auth/register' && method === 'POST') {
-    const { username, password, role, familyCode, joinExisting } = body;
+    let { username, password, role, familyCode, joinExisting } = body;
     if (!username || !password || !role) return res.status(400).json({ error: '请填写完整信息' });
 
     const existing = db.users.find(u => u.username === username);
@@ -139,22 +177,68 @@ async function handleAuth(req, res) {
 
 // 任务
 app.get('/api/tasks', (req, res) => {
-  const tasks = db.tasks.filter(t => t.familyCode === req.user.familyCode && t.status === 'active');
+  const tasks = db.tasks
+    .filter(t => t.familyCode === req.user.familyCode && t.status === 'active')
+    .map(normalizeTask);
+
   if (req.user.role === 'child') {
-    return res.json(tasks.filter(t => !t.assigneeId || t.assigneeId === req.user.id));
+    const visibleTasks = tasks
+      .filter(t => !t.target_child_id || t.target_child_id === req.user.id)
+      .map(task => {
+        const latestSubmission = db.submissions
+          .filter(submission => submission.taskId === task.id && submission.childId === req.user.id)
+          .sort((a, b) => b.createdAt - a.createdAt)[0];
+
+        return {
+          ...task,
+          todaySubmission: latestSubmission ? normalizeSubmission(latestSubmission) : null,
+        };
+      });
+
+    return res.json(visibleTasks);
   }
+
   res.json(tasks);
 });
 
 app.post('/api/tasks', (req, res) => {
   if (req.user.role !== 'parent') return res.status(403).json({ error: '只有家长可以创建任务' });
-  const { title, description, type, points, assigneeId } = req.body;
+  const { title, description, type, points, assigneeId, target_child_id } = req.body;
   if (!title || !type) return res.status(400).json({ error: '请填写任务标题和类型' });
 
-  const task = { id: uid(), title, description: description || '', type, points: points || 0, creatorId: req.user.id, assigneeId: assigneeId || null, familyCode: req.user.familyCode, status: 'active', createdAt: Date.now() };
+  const task = {
+    id: uid(),
+    title,
+    description: description || '',
+    type,
+    points: points || 0,
+    creatorId: req.user.id,
+    target_child_id: target_child_id || assigneeId || null,
+    familyCode: req.user.familyCode,
+    status: 'active',
+    createdAt: Date.now()
+  };
   db.tasks.push(task);
   logActivity(req.user.familyCode, 'task_created', `${req.user.username} 创建了新任务: ${title}`);
-  res.json(task);
+  res.json(normalizeTask(task));
+});
+
+app.patch('/api/tasks/:id', (req, res) => {
+  if (req.user.role !== 'parent') return res.status(403).json({ error: '只有家长可以编辑任务' });
+
+  const task = db.tasks.find(t => t.id === req.params.id && t.familyCode === req.user.familyCode);
+  if (!task) return res.status(404).json({ error: '任务不存在' });
+
+  const updates = req.body || {};
+  if (updates.title !== undefined) task.title = updates.title;
+  if (updates.description !== undefined) task.description = updates.description;
+  if (updates.type !== undefined) task.type = updates.type;
+  if (updates.points !== undefined) task.points = updates.points;
+  if (updates.target_child_id !== undefined || updates.assigneeId !== undefined) {
+    task.target_child_id = updates.target_child_id ?? updates.assigneeId ?? null;
+  }
+
+  res.json(normalizeTask(task));
 });
 
 app.delete('/api/tasks/:id', (req, res) => {
@@ -171,42 +255,72 @@ app.get('/api/submissions', (req, res) => {
   if (req.user.role === 'child') {
     submissions = submissions.filter(s => s.childId === req.user.id);
   }
-  res.json(submissions.reverse());
+  if (req.query.status) {
+    submissions = submissions.filter(s => s.status === req.query.status);
+  }
+  if (req.query.childId) {
+    submissions = submissions.filter(s => s.childId === req.query.childId);
+  }
+  res.json(submissions.slice().reverse().map(normalizeSubmission));
 });
 
 app.post('/api/submissions', (req, res) => {
-  const { taskId, photoKey } = req.body;
+  const { taskId, photoKey, photoKeys } = req.body;
   if (!taskId) return res.status(400).json({ error: '请选择任务' });
 
   const task = db.tasks.find(t => t.id === taskId);
   if (!task) return res.status(404).json({ error: '任务不存在' });
 
-  const submission = { id: uid(), taskId, childId: req.user.id, childName: req.user.username, status: 'pending', photoKey: photoKey || null, points: task.points || 0, rejectReason: null, createdAt: Date.now(), familyCode: req.user.familyCode };
+  const child = findUserById(req.user.id) || req.user;
+  const submission = {
+    id: uid(),
+    taskId,
+    childId: req.user.id,
+    childName: req.user.username,
+    childAvatar: child.avatar || '👦',
+    taskTitle: task.title,
+    taskPoints: task.points || 0,
+    status: 'pending',
+    photoKey: Array.isArray(photoKeys) ? JSON.stringify(photoKeys) : (photoKey || null),
+    points: task.points || 0,
+    rejectReason: '',
+    createdAt: Date.now(),
+    reviewedAt: null,
+    familyCode: req.user.familyCode
+  };
   db.submissions.push(submission);
   logActivity(req.user.familyCode, 'submission', `${req.user.username} 提交了任务: ${task.title}`);
-  res.json(submission);
+  res.json(normalizeSubmission(submission));
 });
 
-app.put('/api/submissions/:id', (req, res) => {
+function handleSubmissionReview(req, res) {
   if (req.user.role !== 'parent') return res.status(403).json({ error: '只有家长可以审核' });
   const submission = db.submissions.find(s => s.id === req.params.id);
   if (!submission) return res.status(404).json({ error: '提交不存在' });
 
-  const { status, rejectReason } = req.body;
-  submission.status = status;
+  const { status, action, rejectReason, reason } = req.body;
+  const nextStatus = status || (action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : null);
+  if (!nextStatus) return res.status(400).json({ error: '缺少审核状态' });
+
+  const previousStatus = submission.status;
+  submission.status = nextStatus;
   submission.reviewedAt = Date.now();
 
-  if (status === 'approved') {
-    const child = db.users.find(u => u.username === submission.childName);
+  if (nextStatus === 'approved' && previousStatus !== 'approved') {
+    const child = findUserById(submission.childId) || db.users.find(u => u.username === submission.childName);
     if (child) {
       child.points = (child.points || 0) + submission.points;
       logActivity(req.user.familyCode, 'points', `${submission.childName} 获得了 ${submission.points} 积分`);
     }
+    submission.rejectReason = '';
   }
-  if (status === 'rejected') submission.rejectReason = rejectReason || '';
+  if (nextStatus === 'rejected') submission.rejectReason = reason || rejectReason || '';
 
-  res.json(submission);
-});
+  res.json(normalizeSubmission(submission));
+}
+
+app.put('/api/submissions/:id', handleSubmissionReview);
+app.patch('/api/submissions/:id', handleSubmissionReview);
 
 // 商品
 app.get('/api/products', (req, res) => {
@@ -224,6 +338,22 @@ app.post('/api/products', (req, res) => {
   res.json(product);
 });
 
+app.patch('/api/products/:id', (req, res) => {
+  if (req.user.role !== 'parent') return res.status(403).json({ error: '只有家长可以编辑商品' });
+
+  const product = db.products.find(p => p.id === req.params.id && p.familyCode === req.user.familyCode);
+  if (!product) return res.status(404).json({ error: '商品不存在' });
+
+  const updates = req.body || {};
+  if (updates.name !== undefined) product.name = updates.name;
+  if (updates.description !== undefined) product.description = updates.description;
+  if (updates.emoji !== undefined) product.emoji = updates.emoji;
+  if (updates.category !== undefined) product.category = updates.category;
+  if (updates.price !== undefined) product.price = parseInt(updates.price, 10);
+
+  res.json(product);
+});
+
 app.delete('/api/products/:id', (req, res) => {
   if (req.user.role !== 'parent') return res.status(403).json({ error: '只有家长可以删除商品' });
   const product = db.products.find(p => p.id === req.params.id);
@@ -238,7 +368,10 @@ app.get('/api/redemptions', (req, res) => {
   if (req.user.role === 'child') {
     redemptions = redemptions.filter(r => r.childId === req.user.id);
   }
-  res.json(redemptions.reverse());
+  if (req.query.status) {
+    redemptions = redemptions.filter(r => r.status === req.query.status);
+  }
+  res.json(redemptions.slice().reverse().map(normalizeRedemption));
 });
 
 app.post('/api/redemptions', (req, res) => {
@@ -248,22 +381,36 @@ app.post('/api/redemptions', (req, res) => {
 
   const product = db.products.find(p => p.id === productId && p.status === 'active');
   if (!product) return res.status(404).json({ error: '商品不存在' });
-  if (req.user.points < product.price) return res.status(400).json({ error: '积分不足' });
+  const child = findUserById(req.user.id);
+  if (!child) return res.status(404).json({ error: '用户不存在' });
+  if ((child.points || 0) < product.price) return res.status(400).json({ error: '积分不足' });
 
-  req.user.points -= product.price;
+  child.points -= product.price;
 
   const redemption = { id: uid(), productId, childId: req.user.id, childName: req.user.username, productName: product.name, productEmoji: product.emoji, price: product.price, status: 'pending', createdAt: Date.now(), familyCode: req.user.familyCode };
   db.redemptions.push(redemption);
   logActivity(req.user.familyCode, 'redemption', `${req.user.username} 兑换了: ${product.emoji} ${product.name}`);
-  res.json(redemption);
+  res.json(normalizeRedemption(redemption));
 });
 
-app.put('/api/redemptions/:id', (req, res) => {
+function handleRedemptionReview(req, res) {
   if (req.user.role !== 'parent') return res.status(403).json({ error: '只有家长可以确认兑换' });
   const redemption = db.redemptions.find(r => r.id === req.params.id);
   if (!redemption) return res.status(404).json({ error: '兑换记录不存在' });
-  redemption.status = req.body.status;
-  res.json(redemption);
+  redemption.status = req.body.status || 'confirmed';
+  res.json(normalizeRedemption(redemption));
+}
+
+app.put('/api/redemptions/:id', handleRedemptionReview);
+app.patch('/api/redemptions/:id', handleRedemptionReview);
+
+app.patch('/api/users/avatar', (req, res) => {
+  const user = findUserById(req.user.id);
+  if (!user) return res.status(404).json({ error: '用户不存在' });
+  if (!req.body?.avatar) return res.status(400).json({ error: '缺少头像' });
+
+  user.avatar = req.body.avatar;
+  res.json({ success: true, avatar: user.avatar });
 });
 
 // 照片
@@ -291,15 +438,23 @@ app.get('/api/stats', (req, res) => {
   const redemptions = db.redemptions.filter(r => r.familyCode === req.user.familyCode);
 
   const children = users.filter(u => u.role === 'child');
+  const activeTasks = tasks.filter(t => t.status === 'active').length;
+  const approvedSubmissions = submissions.filter(s => s.status === 'approved').length;
+  const pendingSubmissions = submissions.filter(s => s.status === 'pending').length;
+  const pendingRedemptions = redemptions.filter(r => r.status === 'pending').length;
+  const completionRate = activeTasks > 0 ? Math.round((approvedSubmissions / activeTasks) * 100) : 0;
 
   res.json({
     totalUsers: users.length,
     childrenCount: children.length,
     parentsCount: users.filter(u => u.role === 'parent').length,
-    activeTasks: tasks.filter(t => t.status === 'active').length,
-    pendingSubmissions: submissions.filter(s => s.status === 'pending').length,
-    approvedSubmissions: submissions.filter(s => s.status === 'approved').length,
-    pendingRedemptions: redemptions.filter(r => r.status === 'pending').length,
+    totalTasks: activeTasks,
+    activeTasks,
+    pendingSubmissions,
+    pendingReview: pendingSubmissions,
+    approvedSubmissions,
+    completionRate,
+    pendingRedemptions,
     childrenPoints: children.map(c => ({ id: c.id, username: c.username, avatar: c.avatar, points: c.points || 0 }))
   });
 });

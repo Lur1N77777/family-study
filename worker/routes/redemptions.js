@@ -52,8 +52,8 @@ export async function handleRedemptions(request, env, user, path) {
 
         const redId = uid();
         await env.DB.batch([
-            // 扣减积分
-            env.DB.prepare('UPDATE users SET points = points - ? WHERE id = ?').bind(product.price, user.id),
+            // 扣减积分（带条件保护，防止并发扣成负数）
+            env.DB.prepare('UPDATE users SET points = points - ? WHERE id = ? AND points >= ?').bind(product.price, user.id, product.price),
             // 写入兑换记录
             env.DB.prepare('INSERT INTO redemptions (id, product_id, child_id, product_name, product_emoji, price, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
                 .bind(redId, productId, user.id, product.name, product.emoji, product.price, 'pending', Date.now()),

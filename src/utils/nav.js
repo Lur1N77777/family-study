@@ -26,22 +26,24 @@ const parentTabs = [
     { key: 'settings', route: '/parent/settings', icon: 'settings', label: '设置' },
 ];
 
-function getBadgeCount() {
-    const fc = auth.getFamilyCode();
-    if (!fc) return 0;
-    const stats = store.getStats(fc);
-    return stats.pendingReview + stats.pendingRedemptions;
+async function getBadgeCount() {
+    try {
+        const stats = await store.getStats();
+        if (!stats) return 0;
+        return (stats.pendingReview || 0) + (stats.pendingRedemptions || 0);
+    } catch {
+        return 0;
+    }
 }
 
 function buildNav(role, active) {
     const tabs = role === 'parent' ? parentTabs : studentTabs;
-    const badge = role === 'parent' ? getBadgeCount() : 0;
 
     return tabs.map(tab => `
     <button class="nav-item ${active === tab.key ? 'active' : ''}" data-route="${tab.route}">
       ${icon(tab.icon, 22)}
       <span>${tab.label}</span>
-      ${tab.key === 'review' && badge > 0 ? `<span class="nav-badge">${badge}</span>` : ''}
+      ${tab.key === 'review' ? `<span class="nav-badge" style="display:none"></span>` : ''}
     </button>
   `).join('');
 }
@@ -71,6 +73,17 @@ export function showBottomNav(role, active) {
                 router.navigate(route);
             };
         });
+
+        // 异步加载 badge 数量
+        if (role === 'parent') {
+            getBadgeCount().then(count => {
+                const badge = navElement.querySelector('.nav-badge');
+                if (badge && count > 0) {
+                    badge.textContent = count;
+                    badge.style.display = '';
+                }
+            });
+        }
     }
 
     navElement.style.display = 'flex';
@@ -84,20 +97,21 @@ export function hideBottomNav() {
     currentRole = '';
 }
 
-export function refreshNavBadge() {
+export async function refreshNavBadge() {
     if (navElement && currentRole === 'parent') {
-        const badge = getBadgeCount();
+        const badge = await getBadgeCount();
         const reviewBtn = navElement.querySelector('[data-route="/parent/review"]');
         if (reviewBtn) {
             const existingBadge = reviewBtn.querySelector('.nav-badge');
             if (badge > 0) {
                 if (existingBadge) {
                     existingBadge.textContent = badge;
+                    existingBadge.style.display = '';
                 } else {
                     reviewBtn.insertAdjacentHTML('beforeend', `<span class="nav-badge">${badge}</span>`);
                 }
             } else if (existingBadge) {
-                existingBadge.remove();
+                existingBadge.style.display = 'none';
             }
         }
     }

@@ -82,3 +82,63 @@ export function checkPopAnimation(element) {
     element.style.animation = 'checkPop var(--duration-slow) var(--ease-spring) both';
     haptic('success');
 }
+
+// 弹窗下滑关闭手势
+export function setupSwipeToDismiss(modalOverlay, closeFn) {
+    const content = modalOverlay.querySelector('.modal-content');
+    if (!content) return;
+
+    let startY = 0, currentY = 0, isDragging = false;
+
+    content.addEventListener('touchstart', (e) => {
+        // 只有滚到顶部时才能下滑关闭
+        if (content.scrollTop > 5) return;
+        startY = e.touches[0].clientY;
+        currentY = startY;
+        isDragging = true;
+        content.style.transition = 'none';
+    }, { passive: true });
+
+    content.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        currentY = e.touches[0].clientY;
+        const deltaY = currentY - startY;
+        if (deltaY > 0) {
+            // 下拉：跟手移动，带阻尼
+            const dampened = deltaY * 0.6;
+            content.style.transform = `translateY(${dampened}px)`;
+            // 背景透明度变化
+            const opacity = Math.max(0.1, 0.4 - (deltaY / 800));
+            modalOverlay.style.background = `rgba(0,0,0,${opacity})`;
+        }
+    }, { passive: true });
+
+    content.addEventListener('touchend', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        const deltaY = currentY - startY;
+        content.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+        modalOverlay.style.transition = 'background 0.3s ease';
+
+        if (deltaY > 80) {
+            // 滑动超过阈值 → 关闭
+            content.style.transform = 'translateY(100%)';
+            modalOverlay.style.background = 'rgba(0,0,0,0)';
+            setTimeout(() => {
+                content.style.transform = '';
+                content.style.transition = '';
+                modalOverlay.style.transition = '';
+                modalOverlay.style.background = '';
+                closeFn();
+            }, 300);
+        } else {
+            // 弹回原位
+            content.style.transform = 'translateY(0)';
+            modalOverlay.style.background = '';
+            setTimeout(() => {
+                content.style.transition = '';
+                modalOverlay.style.transition = '';
+            }, 300);
+        }
+    }, { passive: true });
+}

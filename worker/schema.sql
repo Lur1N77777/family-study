@@ -23,12 +23,17 @@ CREATE TABLE IF NOT EXISTS tasks (
   title TEXT NOT NULL,
   description TEXT DEFAULT '',
   type TEXT NOT NULL CHECK(type IN ('daily', 'weekly', 'once', 'semester')),
+  weekly_rule TEXT NOT NULL DEFAULT 'sunday' CHECK(weekly_rule IN ('sunday', 'saturday', 'weekend_twice')),
   points INTEGER NOT NULL DEFAULT 0,
   creator_id TEXT NOT NULL,
   family_code TEXT NOT NULL,
+  target_child_id TEXT,
+  penalty_enabled INTEGER NOT NULL DEFAULT 0,
+  penalty_points INTEGER NOT NULL DEFAULT 0,
   status TEXT DEFAULT 'active',
   created_at INTEGER NOT NULL,
-  FOREIGN KEY (creator_id) REFERENCES users(id)
+  FOREIGN KEY (creator_id) REFERENCES users(id),
+  FOREIGN KEY (target_child_id) REFERENCES users(id)
 );
 
 CREATE INDEX idx_tasks_family ON tasks(family_code, status);
@@ -40,6 +45,8 @@ CREATE TABLE IF NOT EXISTS submissions (
   child_id TEXT NOT NULL,
   status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
   photo_key TEXT,
+  photo_available_until INTEGER,
+  photo_cleared_at INTEGER,
   points INTEGER DEFAULT 0,
   reject_reason TEXT,
   created_at INTEGER NOT NULL,
@@ -50,6 +57,25 @@ CREATE TABLE IF NOT EXISTS submissions (
 
 CREATE INDEX idx_submissions_child ON submissions(child_id, status);
 CREATE INDEX idx_submissions_family ON submissions(child_id);
+CREATE INDEX idx_submissions_photo_retention ON submissions(photo_available_until, photo_cleared_at);
+
+-- 任务惩罚记录
+CREATE TABLE IF NOT EXISTS task_penalties (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL,
+  child_id TEXT NOT NULL,
+  family_code TEXT NOT NULL,
+  period_key TEXT NOT NULL,
+  period_start INTEGER NOT NULL,
+  period_end INTEGER NOT NULL,
+  points INTEGER NOT NULL,
+  applied_at INTEGER NOT NULL,
+  FOREIGN KEY (task_id) REFERENCES tasks(id),
+  FOREIGN KEY (child_id) REFERENCES users(id)
+);
+
+CREATE UNIQUE INDEX idx_task_penalties_unique ON task_penalties(task_id, child_id, period_key);
+CREATE INDEX idx_task_penalties_family ON task_penalties(family_code, applied_at);
 
 -- 商品表
 CREATE TABLE IF NOT EXISTS products (
@@ -94,6 +120,20 @@ CREATE TABLE IF NOT EXISTS activity_log (
 );
 
 CREATE INDEX idx_activity_family ON activity_log(family_code, timestamp);
+
+-- 通知表
+CREATE TABLE IF NOT EXISTS notifications (
+  id TEXT PRIMARY KEY,
+  parent_id TEXT NOT NULL,
+  child_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  type TEXT DEFAULT 'reminder',
+  created_at INTEGER NOT NULL,
+  read_at INTEGER
+);
+
+CREATE INDEX idx_notifications_child ON notifications(child_id, created_at);
 
 -- 演示数据
 INSERT OR IGNORE INTO users (id, username, password_hash, role, family_code, avatar, points, created_at)

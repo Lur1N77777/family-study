@@ -6,15 +6,20 @@ function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-// Base64 URL 编码工具
+// Base64 URL 编码工具（支持 UTF-8）
 function base64UrlEncode(str) {
-    return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const encoder = new TextEncoder();
+    const data = encoder.encode(str);
+    const binString = String.fromCharCode(...data);
+    return btoa(binString).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 function base64UrlDecode(str) {
     str = str.replace(/-/g, '+').replace(/_/g, '/');
     while (str.length % 4) str += '=';
-    return atob(str);
+    const binString = atob(str);
+    const bytes = Uint8Array.from(binString, c => c.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
 }
 
 // HMAC SHA-256 签名

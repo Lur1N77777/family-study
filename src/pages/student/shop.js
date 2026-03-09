@@ -1,50 +1,26 @@
 // ========================================
-// 学生端 — 积分商城
+// Student shop page
 // ========================================
 
 import { icon } from '../../utils/icons.js';
 import { auth } from '../../utils/auth.js';
 import { store } from '../../utils/store.js';
-import { router } from '../../utils/router.js';
 import { toast } from '../../utils/notification.js';
 import { staggerIn, haptic } from '../../utils/animations.js';
-
-function renderBottomNav(container, active) {
-  const nav = document.createElement('nav');
-  nav.className = 'bottom-nav';
-  nav.innerHTML = `
-    <button class="nav-item ${active === 'home' ? 'active' : ''}" data-route="/student">
-      ${icon('home', 22)}<span>首页</span>
-    </button>
-    <button class="nav-item ${active === 'tasks' ? 'active' : ''}" data-route="/student/tasks">
-      ${icon('tasks', 22)}<span>任务</span>
-    </button>
-    <button class="nav-item ${active === 'shop' ? 'active' : ''}" data-route="/student/shop">
-      ${icon('gift', 22)}<span>商城</span>
-    </button>
-    <button class="nav-item ${active === 'profile' ? 'active' : ''}" data-route="/student/profile">
-      ${icon('user', 22)}<span>我的</span>
-    </button>
-  `;
-  nav.querySelectorAll('.nav-item').forEach(btn => {
-    btn.onclick = () => router.navigate(btn.dataset.route);
-  });
-  container.appendChild(nav);
-}
+import { showBottomNav } from '../../utils/nav.js';
 
 export async function renderStudentShop(container) {
   container.innerHTML = `<div style="padding:var(--space-8);text-align:center;color:var(--color-text-tertiary)">加载中...</div>`;
 
   await auth.refreshUser();
-  const user = auth.currentUser;
-
+  const user = auth.requireUser();
   const products = await store.getProducts();
 
   let activeCategory = 'all';
 
   function render() {
     const points = user.points || 0;
-    const filtered = activeCategory === 'all' ? products : products.filter(p => p.category === activeCategory);
+    const filtered = activeCategory === 'all' ? products : products.filter((product) => product.category === activeCategory);
 
     container.innerHTML = `
       <div class="page shop-page">
@@ -63,16 +39,16 @@ export async function renderStudentShop(container) {
         </div>
 
         <div class="product-grid" id="products">
-          ${filtered.map(p => `
-            <div class="product-card ${points < p.price ? 'product-disabled' : ''}" data-stagger>
-              <div class="product-emoji">${p.emoji || '🎁'}</div>
-              <h3 class="product-name">${p.name}</h3>
-              <p class="product-desc">${p.description || ''}</p>
+          ${filtered.map((product) => `
+            <div class="product-card ${points < product.price ? 'product-disabled' : ''}" data-stagger>
+              <div class="product-emoji">${product.emoji || '馃巵'}</div>
+              <h3 class="product-name">${product.name}</h3>
+              <p class="product-desc">${product.description || ''}</p>
               <div class="product-footer">
-                <span class="product-price">${p.price}</span>
-                <button class="btn btn-primary btn-sm product-buy-btn" 
-                  data-product-id="${p.id}" 
-                  ${points < p.price ? 'disabled' : ''}>
+                <span class="product-price">${product.price}</span>
+                <button class="btn btn-primary btn-sm product-buy-btn"
+                  data-product-id="${product.id}"
+                  ${points < product.price ? 'disabled' : ''}>
                   兑换
                 </button>
               </div>
@@ -82,13 +58,12 @@ export async function renderStudentShop(container) {
             <div class="empty-state" style="grid-column:1/-1">
               ${icon('gift', 48)}
               <h3>暂无商品</h3>
-              <p>家长还没有上架商品</p>
+              <p>家长还没有上架奖励</p>
             </div>
           ` : ''}
         </div>
       </div>
 
-      <!-- 兑换确认弹窗 -->
       <div class="modal-overlay" id="confirm-modal" style="display:none">
         <div class="modal-content">
           <div class="modal-handle"></div>
@@ -118,12 +93,11 @@ export async function renderStudentShop(container) {
           font-family: var(--font-mono);
           font-weight: var(--weight-bold);
           color: var(--color-primary);
-          font-size: var(--text-md);
         }
 
         .product-grid {
           display: grid;
-          grid-template-columns: repeat(2, 1fr);
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: var(--space-3);
         }
 
@@ -132,20 +106,15 @@ export async function renderStudentShop(container) {
           border-radius: var(--radius-xl);
           padding: var(--space-4);
           box-shadow: var(--shadow-sm);
-          display: flex;
-          flex-direction: column;
-          transition: transform var(--duration-fast) var(--ease-out);
         }
 
-        .product-card:active { transform: scale(0.97); }
-
-        .product-card.product-disabled {
-          opacity: 0.5;
+        .product-disabled {
+          opacity: 0.6;
         }
 
         .product-emoji {
-          font-size: 2.5rem;
-          margin-bottom: var(--space-3);
+          font-size: 2.4rem;
+          margin-bottom: var(--space-2);
         }
 
         .product-name {
@@ -155,10 +124,9 @@ export async function renderStudentShop(container) {
         }
 
         .product-desc {
-          font-size: var(--text-xs);
+          font-size: var(--text-sm);
           color: var(--color-text-secondary);
-          line-height: 1.4;
-          flex: 1;
+          min-height: 2.6em;
           margin-bottom: var(--space-3);
         }
 
@@ -166,6 +134,7 @@ export async function renderStudentShop(container) {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          gap: var(--space-2);
         }
 
         .product-price {
@@ -173,33 +142,22 @@ export async function renderStudentShop(container) {
           font-weight: var(--weight-bold);
           color: var(--color-primary);
         }
-
-        .product-price::after {
-          content: ' 积分';
-          font-family: var(--font-family);
-          font-weight: var(--weight-regular);
-          font-size: var(--text-xs);
-          color: var(--color-text-tertiary);
-        }
       </style>
     `;
 
-    // Tab 事件
-    container.querySelectorAll('.tab').forEach(tab => {
+    container.querySelectorAll('.tab[data-cat]').forEach((tab) => {
       tab.onclick = () => {
         activeCategory = tab.dataset.cat;
         render();
       };
     });
 
-    // 兑换按钮
-    container.querySelectorAll('.product-buy-btn').forEach(btn => {
-      btn.onclick = () => {
-        const productId = btn.dataset.productId;
-        const product = products.find(p => p.id === productId);
-        if (!product) return;
-
-        showConfirmModal(product, points);
+    container.querySelectorAll('.product-buy-btn').forEach((button) => {
+      button.onclick = () => {
+        const product = products.find((item) => item.id === button.dataset.productId);
+        if (product) {
+          openRedeemModal(product, points);
+        }
       };
     });
 
@@ -207,16 +165,17 @@ export async function renderStudentShop(container) {
     showBottomNav('child', 'shop');
   }
 
-  function showConfirmModal(product, points) {
+  function openRedeemModal(product, points) {
     const modal = container.querySelector('#confirm-modal');
     const body = container.querySelector('#modal-body');
     modal.style.display = 'flex';
 
     body.innerHTML = `
-      <div style="text-align:center;margin-bottom:var(--space-6)">
-        <div style="font-size:3.5rem;margin-bottom:var(--space-3)">${product.emoji || '🎁'}</div>
-        <h2 class="modal-title" style="margin-bottom:var(--space-1)">${product.name}</h2>
-        <p style="color:var(--color-text-secondary);font-size:var(--text-sm)">${product.description || ''}</p>
+      <h2 class="modal-title">确认兑换</h2>
+      <div style="text-align:center;margin-bottom:var(--space-4)">
+        <div style="font-size:3rem">${product.emoji || '馃巵'}</div>
+        <h3 style="margin-top:var(--space-2)">${product.name}</h3>
+        <p style="color:var(--color-text-secondary);font-size:var(--text-sm)">${product.description || '暂无描述'}</p>
       </div>
       <div style="display:flex;justify-content:space-between;padding:var(--space-4);background:var(--color-divider);border-radius:var(--radius-lg);margin-bottom:var(--space-6)">
         <div>
@@ -234,52 +193,44 @@ export async function renderStudentShop(container) {
       </div>
     `;
 
-    body.querySelector('#cancel-redeem').onclick = () => {
-      modal.classList.add('closing');
-      setTimeout(() => {
-        modal.style.display = 'none';
-        modal.classList.remove('closing');
-      }, 300);
-    };
-
-    modal.onclick = (e) => {
-      if (e.target === modal) {
-        modal.classList.add('closing');
-        setTimeout(() => {
-          modal.style.display = 'none';
-          modal.classList.remove('closing');
-        }, 300);
+    body.querySelector('#cancel-redeem').onclick = () => closeModal(modal);
+    modal.onclick = (event) => {
+      if (event.target === modal) {
+        closeModal(modal);
       }
     };
 
     body.querySelector('#confirm-redeem').onclick = async () => {
-      const btn = body.querySelector('#confirm-redeem');
-      btn.innerHTML = '兑换中...';
-      btn.disabled = true;
+      const button = body.querySelector('#confirm-redeem');
+      button.innerHTML = '兑换中...';
+      button.disabled = true;
 
-      const result = await store.redeemProduct(product.id);
+      try {
+        await store.redeemProduct(product.id);
+        haptic('success');
+        toast('兑换成功，等待家长确认', 'success');
 
-      if (result.error) {
-        toast(result.error, 'error');
-        btn.innerHTML = '确认兑换';
-        btn.disabled = false;
-        return;
+        user.points -= product.price;
+
+        closeModal(modal, () => {
+          render();
+        });
+      } catch (error) {
+        toast(error.message || '兑换失败，请重试', 'error');
+        button.innerHTML = '确认兑换';
+        button.disabled = false;
       }
-
-      haptic('success');
-      toast('兑换成功！等待家长确认', 'success');
-
-      // 更新本地余额
-      user.points -= product.price;
-
-      modal.classList.add('closing');
-      setTimeout(() => {
-        modal.style.display = 'none';
-        modal.classList.remove('closing');
-        render();
-      }, 300);
     };
   }
 
   render();
+}
+
+function closeModal(modal, onClosed) {
+  modal.classList.add('closing');
+  setTimeout(() => {
+    modal.style.display = 'none';
+    modal.classList.remove('closing');
+    onClosed?.();
+  }, 300);
 }

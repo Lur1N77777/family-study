@@ -9,12 +9,13 @@ import { router } from '../../utils/router.js';
 import { animateNumber, staggerIn } from '../../utils/animations.js';
 import { toast } from '../../utils/notification.js';
 import { showBottomNav } from '../../utils/nav.js';
+import { escapeHtml } from '../../utils/escape.js';
 
 export async function renderParentOverview(container) {
   container.innerHTML = `<div style="padding:var(--space-8);text-align:center;color:var(--color-text-tertiary)">加载中...</div>`;
 
   await auth.refreshUser();
-  const user = auth.currentUser;
+  const user = auth.requireUser();
   const familyCode = auth.getFamilyCode();
 
   const [stats, users, activities] = await Promise.all([
@@ -24,6 +25,7 @@ export async function renderParentOverview(container) {
   ]);
 
   const children = users.filter(u => u.role === 'child');
+  const parents = users.filter(u => u.role === 'parent' && u.id !== user.id); // 除自己外的其他家长
 
   container.innerHTML = `
     <div class="page parent-overview">
@@ -31,7 +33,7 @@ export async function renderParentOverview(container) {
         <div class="greeting">
           <span class="greeting-emoji">${user.avatar}</span>
           <div>
-            <h1 class="page-title">你好，${user.username}</h1>
+            <h1 class="page-title">你好，${escapeHtml(user.username)}</h1>
             <p class="page-subtitle">家庭学习管理中心</p>
           </div>
         </div>
@@ -66,16 +68,34 @@ export async function renderParentOverview(container) {
         </div>
       </div>
 
+      <!-- 其他家长列表 -->
+      ${parents.length > 0 ? `
+        <section class="overview-section animate-fade-in-up stagger-3">
+          <h2 class="section-title" style="margin-bottom:var(--space-3)">其他家长</h2>
+          <div class="list-group">
+            ${parents.map(parent => `
+              <div class="list-item">
+                <div class="avatar">${parent.avatar}</div>
+                <div class="list-item-content">
+                  <div class="list-item-title">${escapeHtml(parent.username)}</div>
+                  <div class="list-item-subtitle">家长</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </section>
+      ` : ''}
+
       <!-- 孩子列表 -->
       ${children.length > 0 ? `
-        <section class="overview-section animate-fade-in-up stagger-3">
+        <section class="overview-section animate-fade-in-up stagger-4">
           <h2 class="section-title" style="margin-bottom:var(--space-3)">我的孩子</h2>
           <div class="list-group">
             ${children.map(child => `
               <div class="list-item">
                 <div class="avatar">${child.avatar}</div>
                 <div class="list-item-content">
-                  <div class="list-item-title">${child.username}</div>
+                  <div class="list-item-title">${escapeHtml(child.username)}</div>
                   <div class="list-item-subtitle">积分: ${child.points || 0}</div>
                 </div>
                 <span class="points-display" style="font-size:var(--text-md)">${child.points || 0}</span>
@@ -84,7 +104,7 @@ export async function renderParentOverview(container) {
           </div>
         </section>
       ` : `
-        <section class="overview-section animate-fade-in-up stagger-3">
+        <section class="overview-section animate-fade-in-up stagger-4">
           <div class="empty-invite-card">
             ${icon('users', 32)}
             <p>还没有孩子加入</p>

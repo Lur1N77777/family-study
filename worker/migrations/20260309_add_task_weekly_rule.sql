@@ -1,0 +1,1 @@
+ALTER TABLE tasks ADD COLUMN weekly_rule TEXT NOT NULL DEFAULT 'sunday';

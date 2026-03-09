@@ -25,8 +25,8 @@ export function renderLanding(container) {
       <!-- Hero 区域 -->
       <div class="landing-content">
         <div class="landing-hero animate-fade-in-up">
-          <div class="hero-icon">📚</div>
-          <h1 class="hero-title">学习监督</h1>
+          <img class="hero-icon" src="/logo.png" alt="约约依可" />
+          <h1 class="hero-title">约约依可学习系统</h1>
           <p class="hero-subtitle">让学习变得有动力，让成长看得见</p>
         </div>
 
@@ -117,20 +117,27 @@ export function renderLanding(container) {
       }
 
       .hero-icon {
-        font-size: 4rem;
+        width: 140px;
+        height: 140px;
         margin-bottom: var(--space-4);
         animation: float 3s var(--ease-smooth) infinite;
+        object-fit: contain;
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
       }
 
       .hero-title {
         font-size: var(--text-hero);
-        font-weight: var(--weight-bold);
-        letter-spacing: -0.03em;
-        background: linear-gradient(135deg, var(--color-text-primary) 0%, var(--color-primary) 100%);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        background: linear-gradient(135deg, #4A7DFF 0%, #A855F7 50%, #FF6B6B 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
-        line-height: 1.1;
+        line-height: 1.2;
+        text-align: center;
+        font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
       }
 
       .hero-subtitle {

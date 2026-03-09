@@ -1,5 +1,5 @@
 // ========================================
-// 登录 / 注册页
+// Login / register page
 // ========================================
 
 import { icon } from '../utils/icons.js';
@@ -8,19 +8,20 @@ import { router } from '../utils/router.js';
 import { toast } from '../utils/notification.js';
 
 export function renderLogin(container, isRegister = false) {
-    if (auth.isLoggedIn()) {
-        router.navigate(auth.getRole() === 'parent' ? '/parent' : '/student');
-        return;
-    }
+  if (auth.isLoggedIn()) {
+    router.navigate(auth.getRole() === 'parent' ? '/parent' : '/student');
+    return;
+  }
 
-    const role = sessionStorage.getItem('login_role') || 'child';
-    const roleEmoji = role === 'parent' ? '👨' : '👦';
-    const roleName = role === 'parent' ? '家长' : '学生';
+  const role = sessionStorage.getItem('login_role') || 'child';
+  const roleEmoji = role === 'parent' ? '家' : '学';
+  const roleName = role === 'parent' ? '家长' : '学生';
+  const pendingAuthMessage = auth.consumeAuthMessage();
 
-    let showRegister = isRegister;
+  let showRegister = isRegister;
 
-    function render() {
-        container.innerHTML = `
+  function render() {
+    container.innerHTML = `
       <div class="login-page">
         <div class="login-header">
           <button class="btn btn-icon" id="back-btn">${icon('arrowLeft', 20)}</button>
@@ -45,8 +46,8 @@ export function renderLogin(container, isRegister = false) {
             ${showRegister && role === 'child' ? `
               <div class="input-group">
                 <label class="input-label">家庭码</label>
-                <input class="input" type="text" id="family-code" placeholder="输入家长提供的六位家庭码" maxlength="6" pattern="[0-9]{6}" required />
-                <p class="input-hint">请向家长索取六位数字家庭码</p>
+                <input class="input" type="text" id="family-code" placeholder="输入家长提供的六位家庭码" maxlength="6" required />
+                <p class="input-hint">请向家长索取六位家庭码</p>
               </div>
             ` : ''}
 
@@ -60,7 +61,7 @@ export function renderLogin(container, isRegister = false) {
               </div>
               <div class="input-group" id="join-code-group" style="display:none">
                 <label class="input-label">家庭码</label>
-                <input class="input" type="text" id="join-family-code" placeholder="输入已有的六位家庭码" maxlength="6" pattern="[0-9]{6}" />
+                <input class="input" type="text" id="join-family-code" placeholder="输入已有家庭的六位家庭码" maxlength="6" />
                 <p class="input-hint">向其他家长索取家庭码即可加入</p>
               </div>
             ` : ''}
@@ -80,7 +81,7 @@ export function renderLogin(container, isRegister = false) {
         ${showRegister && role === 'parent' ? `
           <div class="register-hint animate-fade-in stagger-3">
             <div class="hint-icon">${icon('key', 18)}</div>
-            <p id="hint-text">创建新家庭后系统将自动生成六位家庭码，用于邀请家人加入</p>
+            <p id="hint-text">创建新家庭后，系统会自动生成六位家庭码，用来邀请家人加入。</p>
           </div>
         ` : ''}
       </div>
@@ -176,101 +177,105 @@ export function renderLogin(container, isRegister = false) {
       </style>
     `;
 
-        // 事件
-        container.querySelector('#back-btn').onclick = () => router.navigate('/');
+    container.querySelector('#back-btn').onclick = () => router.navigate('/');
 
-        container.querySelector('#switch-btn').onclick = () => {
-            showRegister = !showRegister;
-            render();
-        };
+    container.querySelector('#switch-btn').onclick = () => {
+      showRegister = !showRegister;
+      render();
+    };
 
-        // 家长注册模式切换
-        container.querySelectorAll('.tab[data-mode]').forEach(tab => {
-            tab.onclick = () => {
-                container.querySelectorAll('.tab[data-mode]').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                const joinGroup = container.querySelector('#join-code-group');
-                const hintText = container.querySelector('#hint-text');
-                if (tab.dataset.mode === 'join') {
-                    if (joinGroup) joinGroup.style.display = 'block';
-                    if (hintText) hintText.textContent = '输入已有家庭码即可加入，共同管理孩子学习';
-                } else {
-                    if (joinGroup) joinGroup.style.display = 'none';
-                    if (hintText) hintText.textContent = '创建新家庭后系统将自动生成六位家庭码，用于邀请家人加入';
-                }
-            };
-        });
+    container.querySelectorAll('.tab[data-mode]').forEach((tab) => {
+      tab.onclick = () => {
+        container.querySelectorAll('.tab[data-mode]').forEach((item) => item.classList.remove('active'));
+        tab.classList.add('active');
+        const joinGroup = container.querySelector('#join-code-group');
+        const hintText = container.querySelector('#hint-text');
 
-        container.querySelector('#auth-form').onsubmit = async (e) => {
-            e.preventDefault();
-            const submitBtn = container.querySelector('#submit-btn');
-            const originalBtnText = submitBtn.innerHTML;
+        if (tab.dataset.mode === 'join') {
+          if (joinGroup) joinGroup.style.display = 'block';
+          if (hintText) hintText.textContent = '输入已有家庭码即可加入，与其他家长共同管理孩子学习。';
+        } else {
+          if (joinGroup) joinGroup.style.display = 'none';
+          if (hintText) hintText.textContent = '创建新家庭后，系统会自动生成六位家庭码，用来邀请家人加入。';
+        }
+      };
+    });
 
-            const username = container.querySelector('#username').value.trim();
-            const password = container.querySelector('#password').value.trim();
+    container.querySelector('#auth-form').onsubmit = async (event) => {
+      event.preventDefault();
+      const submitBtn = container.querySelector('#submit-btn');
+      const originalText = submitBtn.innerHTML;
 
-            if (!username || !password) {
-                toast('请填写完整信息', 'warning');
-                return;
+      const username = container.querySelector('#username').value.trim();
+      const password = container.querySelector('#password').value.trim();
+
+      if (!username || !password) {
+        toast('请填写完整信息', 'warning');
+        return;
+      }
+
+      if (showRegister) {
+        let familyCode = '';
+        let joinExisting = false;
+
+        if (role === 'child') {
+          familyCode = container.querySelector('#family-code')?.value.trim();
+          if (!familyCode || familyCode.length !== 6) {
+            toast('请输入有效的六位家庭码', 'warning');
+            return;
+          }
+        } else {
+          const joinGroup = container.querySelector('#join-code-group');
+          if (joinGroup && joinGroup.style.display !== 'none') {
+            joinExisting = true;
+            familyCode = container.querySelector('#join-family-code')?.value.trim();
+            if (!familyCode || familyCode.length !== 6) {
+              toast('请输入有效的六位家庭码', 'warning');
+              return;
             }
+          }
+        }
 
-            if (showRegister) {
-                let familyCode = '';
-                let joinExisting = false;
-                if (role === 'child') {
-                    familyCode = container.querySelector('#family-code')?.value.trim();
-                    if (!familyCode || familyCode.length !== 6) {
-                        toast('请输入有效的六位家庭码', 'warning');
-                        return;
-                    }
-                } else if (role === 'parent') {
-                    const joinGroup = container.querySelector('#join-code-group');
-                    if (joinGroup && joinGroup.style.display !== 'none') {
-                        joinExisting = true;
-                        familyCode = container.querySelector('#join-family-code')?.value.trim();
-                        if (!familyCode || familyCode.length !== 6) {
-                            toast('请输入有效的六位家庭码', 'warning');
-                            return;
-                        }
-                    }
-                }
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = showRegister ? '注册中...' : '登录中...';
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '注册中...';
 
-                const result = await auth.register(username, password, role, familyCode, joinExisting);
+        try {
+          const result = await auth.register(username, password, role, familyCode, joinExisting);
+          toast('注册成功', 'success');
+          if (role === 'parent' && !joinExisting) {
+            toast(`您的家庭码：${result.familyCode || '已生成'}`, 'info', 5000);
+          }
+        } catch (error) {
+          toast(error.message || '注册失败，请重试', 'error');
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = originalText;
+          return;
+        }
+      } else {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '登录中...';
 
-                if (result.error) {
-                    toast(result.error, 'error');
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = originalBtnText;
-                    return;
-                }
-                toast('注册成功！', 'success');
-                if (role === 'parent' && !joinExisting) {
-                    toast(`您的家庭码: ${result.familyCode || '生成中'}`, 'info', 5000);
-                }
-            } else {
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = '登录中...';
+        try {
+          await auth.login(username, password);
+          toast('登录成功', 'success');
+        } catch (error) {
+          toast(error.message || '登录失败，请重试', 'error');
+          container.querySelector('#auth-form').classList.add('animate-shake');
+          setTimeout(() => container.querySelector('#auth-form')?.classList.remove('animate-shake'), 500);
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = originalText;
+          return;
+        }
+      }
 
-                const result = await auth.login(username, password);
+      const nextPage = auth.getRole() === 'parent' ? '/parent' : '/student';
+      setTimeout(() => router.navigate(nextPage), 300);
+    };
+  }
 
-                if (result.error) {
-                    toast(result.error, 'error');
-                    container.querySelector('#auth-form').classList.add('animate-shake');
-                    setTimeout(() => container.querySelector('#auth-form')?.classList.remove('animate-shake'), 500);
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = originalBtnText;
-                    return;
-                }
-                toast('登录成功', 'success');
-            }
+  if (pendingAuthMessage) {
+    toast(pendingAuthMessage, 'warning', 4000);
+  }
 
-            setTimeout(() => {
-                router.navigate(auth.getRole() === 'parent' ? '/parent' : '/student');
-            }, 300);
-        };
-    }
-
-    render();
+  render();
 }

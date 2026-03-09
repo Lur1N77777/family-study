@@ -1,5 +1,5 @@
 // ========================================
-// 轻量级 Hash 路由器
+// Lightweight hash router
 // ========================================
 
 class Router {
@@ -10,7 +10,10 @@ class Router {
         this.beforeEach = null;
         this._navigating = false;
         this._pendingCleanup = null;
-        window.addEventListener('hashchange', () => this.resolve());
+        this._resolveToken = 0;
+        window.addEventListener('hashchange', () => {
+            void this.resolve();
+        });
     }
 
     add(path, handler) {
@@ -27,7 +30,7 @@ class Router {
         window.location.hash = path;
     }
 
-    resolve() {
+    async resolve() {
         const hash = window.location.hash.slice(1) || '/';
 
         if (this.beforeEach) {
@@ -45,58 +48,83 @@ class Router {
         const oldRoute = this.currentRoute;
         this.currentRoute = hash;
 
-        // 取消之前还没完成的清理定时器
         if (this._pendingCleanup) {
             clearTimeout(this._pendingCleanup);
             this._pendingCleanup = null;
         }
 
-        // 立即清理所有旧页面（防止重叠）
         const existingChildren = Array.from(app.children);
-
-        // 如果是从同一个路由刷新，或者首次加载，直接替换
         if (!oldRoute || oldRoute === hash) {
-            existingChildren.forEach(child => child.remove());
+            existingChildren.forEach((child) => child.remove());
         } else {
-            // 只保留最后一个旧页面做退出动画，其余立即清除
-            existingChildren.forEach((child, i) => {
-                if (i < existingChildren.length - 1) {
-                    child.remove(); // 多余的旧页面立即清除
+            existingChildren.forEach((child, index) => {
+                if (index < existingChildren.length - 1) {
+                    child.remove();
                 }
             });
         }
 
-        // 创建新页面容器 — 改用 relative 定位，不再用 absolute 以允许自然滚动
         const wrapper = document.createElement('div');
         wrapper.className = 'page-wrapper';
 
         if (oldRoute && oldRoute !== hash) {
             const direction = this.getDirection(oldRoute, hash);
 
-            // 新页面入场动画
-            if (direction === 'forward' || direction === 'back') {
-                wrapper.style.animation = direction === 'forward'
-                    ? 'fadeInScale var(--duration-slow) var(--ease-out) both'
-                    : 'fadeInScale var(--duration-slow) var(--ease-out) both';
+            if (direction === 'forward') {
+                wrapper.style.animation = 'slideInRight var(--duration-slow) var(--ease-out) both';
+            } else if (direction === 'back') {
+                wrapper.style.animation = 'slideInLeft var(--duration-slow) var(--ease-out) both';
             } else {
-                wrapper.style.animation = 'fadeIn var(--duration-base) var(--ease-out) both';
+                wrapper.style.animation = 'fadeInScale var(--duration-base) var(--ease-out) both';
             }
 
-            // 旧页面退出
+            wrapper.addEventListener('animationend', () => {
+                wrapper.style.animation = '';
+            }, { once: true });
+
             const oldPage = app.firstElementChild;
             if (oldPage && oldPage !== wrapper) {
-                oldPage.style.opacity = '0';
-                oldPage.style.transition = 'opacity 200ms ease-out';
+                const exitDirection = direction === 'forward' ? 'slideOutLeft' : 'slideOutRight';
+                oldPage.style.animation = `${exitDirection} 200ms ease-out forwards`;
                 oldPage.style.pointerEvents = 'none';
                 this._pendingCleanup = setTimeout(() => oldPage.remove(), 200);
             }
         }
 
         app.appendChild(wrapper);
-        handler(wrapper);
 
-        // 滚动到顶部
-        window.scrollTo(0, 0);
+        try {
+            const resolveToken = ++this._resolveToken;
+            await Promise.resolve(handler(wrapper));
+            if (resolveToken === this._resolveToken) {
+                window.scrollTo(0, 0);
+            }
+        } catch (error) {
+            console.error(`Route render failed [${hash}]`, error);
+            if (error?.status === 401) {
+                return;
+            }
+
+            wrapper.innerHTML = `
+                <div class="page" style="padding:var(--space-8);display:grid;place-items:center;min-height:60vh">
+                    <div class="empty-state" style="max-width:420px">
+                        <h3>页面加载失败</h3>
+                        <p style="margin-top:var(--space-2);line-height:1.6">${error?.message || '请稍后重试'}</p>
+                        <div style="display:flex;gap:var(--space-3);margin-top:var(--space-5);justify-content:center;flex-wrap:wrap">
+                            <button class="btn btn-primary" id="route-retry-btn">重新加载</button>
+                            <button class="btn btn-secondary" id="route-home-btn">回到首页</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            wrapper.querySelector('#route-retry-btn')?.addEventListener('click', () => {
+                void this.resolve();
+            });
+            wrapper.querySelector('#route-home-btn')?.addEventListener('click', () => {
+                this.navigate('/');
+            });
+        }
     }
 
     getDirection(from, to) {
@@ -112,7 +140,7 @@ class Router {
     }
 
     start() {
-        this.resolve();
+        void this.resolve();
     }
 }
 

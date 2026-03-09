@@ -18,6 +18,9 @@ bucket_name = "family-study-photos"
 JWT_SECRET = "change-me-to-a-secure-random-string"
 CORS_ORIGIN = "*"
 
+[triggers]
+crons = ["5 16 * * *"]
+
 # Pages 配置（前端）
 [site]
 bucket = "./dist"
