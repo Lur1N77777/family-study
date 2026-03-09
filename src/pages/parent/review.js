@@ -7,6 +7,10 @@ import { getPhoto, parsePhotoKeys } from '../../utils/camera.js';
 import { canPreviewReviewedSubmissionPhotos, getSubmissionPhotoKeys, getSubmissionPhotoState } from '../../utils/submission-photos.js';
 import { showBottomNav, refreshNavBadge } from '../../utils/nav.js';
 import { escapeHtml } from '../../utils/escape.js';
+import {
+  registerCollapseTransitionEnd,
+  registerExpandTransitionEnd,
+} from '../../utils/expandable-transition.js';
 
 export async function renderParentReview(container) {
   container.innerHTML = '<div style="padding:var(--space-8);text-align:center;color:var(--color-text-tertiary)">加载中...</div>';
@@ -316,6 +320,15 @@ export async function renderParentReview(container) {
         .record-card {
           border-radius: 20px;
           padding: 13px 14px;
+          transition:
+            border-color var(--duration-fast) var(--ease-out),
+            box-shadow var(--duration-fast) var(--ease-out),
+            transform var(--duration-fast) var(--ease-out);
+        }
+        .record-card.expanded {
+          border-color: color-mix(in srgb, var(--color-primary) 22%, transparent);
+          box-shadow: var(--shadow-md);
+          transform: translateY(-1px);
         }
         .record-head {
           display: flex;
@@ -363,6 +376,46 @@ export async function renderParentReview(container) {
           background: color-mix(in srgb, var(--color-primary) 10%, transparent);
           color: var(--color-primary);
           white-space: nowrap;
+          transition:
+            background var(--duration-fast) var(--ease-out),
+            color var(--duration-fast) var(--ease-out),
+            transform var(--duration-fast) var(--ease-out);
+        }
+        .record-photo-toggle:hover {
+          background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+          transform: translateY(-1px);
+        }
+        .record-photo-toggle-icon,
+        .record-photo-toggle-arrow {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .record-photo-toggle-arrow {
+          transition: transform .32s var(--ease-out);
+        }
+        .record-photo-toggle.expanded .record-photo-toggle-arrow {
+          transform: rotate(90deg);
+        }
+        .record-photo-detail {
+          max-height: 0;
+          overflow: hidden;
+          padding: 0 1px;
+          opacity: 0;
+          transform: translateY(-6px);
+          pointer-events: none;
+          transition:
+            max-height .34s cubic-bezier(0.4, 0, 0.2, 1),
+            padding-top .34s cubic-bezier(0.4, 0, 0.2, 1),
+            padding-bottom .34s cubic-bezier(0.4, 0, 0.2, 1),
+            opacity .22s ease,
+            transform .34s cubic-bezier(0.22, 1, 0.36, 1);
+          will-change: max-height, opacity, transform;
+        }
+        .record-card.expanded .record-photo-detail {
+          opacity: 1;
+          transform: translateY(0);
+          pointer-events: auto;
         }
         .record-photo-strip {
           display: grid;
@@ -370,7 +423,6 @@ export async function renderParentReview(container) {
           grid-auto-columns: minmax(88px, 96px);
           gap: 8px;
           overflow-x: auto;
-          padding-top: 10px;
           scrollbar-width: none;
         }
         .record-photo-strip::-webkit-scrollbar { display: none; }
@@ -535,7 +587,7 @@ export async function renderParentReview(container) {
       if (state.taskView === 'pending') {
         hydratePhotoCells('.review-photo-cell[data-photo-key]');
       } else {
-        hydratePhotoCells('.record-photo-cell[data-photo-key]');
+        restoreExpandedRecordCards();
       }
     }
     staggerIn(container, '[data-stagger]');
@@ -560,9 +612,7 @@ export async function renderParentReview(container) {
     }));
 
     container.querySelectorAll('[data-record-toggle]').forEach((button) => button.addEventListener('click', () => {
-      const recordId = button.dataset.recordToggle;
-      state.expandedRecordId = state.expandedRecordId === recordId ? null : recordId;
-      render();
+      toggleRecordCard(button.dataset.recordToggle);
     }));
 
     container.querySelectorAll('.approve-btn').forEach((button) => button.addEventListener('click', async () => {
@@ -686,9 +736,17 @@ export async function renderParentReview(container) {
     return state.photoCache.get(photoKey);
   }
 
-  async function hydratePhotoCells(selector) {
-    const cells = Array.from(container.querySelectorAll(selector));
+  async function hydratePhotoCells(scopeOrSelector, selector) {
+    const scope = typeof scopeOrSelector === 'string' || !scopeOrSelector
+      ? container
+      : scopeOrSelector;
+    const resolvedSelector = typeof scopeOrSelector === 'string'
+      ? scopeOrSelector
+      : selector || '.review-photo-cell[data-photo-key], .record-photo-cell[data-photo-key]';
+    const cells = Array.from(scope.querySelectorAll(resolvedSelector));
     await Promise.all(cells.map(async (cell) => {
+      if (cell.dataset.hydrated === 'true') return;
+
       const photoKey = cell.dataset.photoKey;
       const dataUrl = await getPhotoUrlCached(photoKey);
 
@@ -698,9 +756,13 @@ export async function renderParentReview(container) {
       } else {
         cell.innerHTML = '<span class="photo-loading">加载失败</span>';
       }
+
+      cell.dataset.hydrated = 'true';
     }));
 
     cells.forEach((cell) => {
+      if (cell.dataset.bound === 'true') return;
+
       cell.addEventListener('click', () => {
         const holder = cell.closest('[data-photo-keys]');
         if (!holder) return;
@@ -715,7 +777,115 @@ export async function renderParentReview(container) {
           // Ignore malformed card payloads.
         }
       });
+
+      cell.dataset.bound = 'true';
     });
+  }
+
+  function restoreExpandedRecordCards() {
+    const expandedCards = Array.from(container.querySelectorAll('.record-card.expanded'));
+    expandedCards.forEach((card) => {
+      const detail = card.querySelector('.record-photo-detail');
+      if (!detail) return;
+
+      detail.hidden = false;
+      detail.style.paddingTop = '10px';
+      detail.style.paddingBottom = '14px';
+      detail.style.opacity = '1';
+      detail.style.transform = 'translateY(0)';
+      detail.style.pointerEvents = 'auto';
+      detail.style.maxHeight = 'none';
+      syncRecordToggle(card, true);
+      hydratePhotoCells(card, '.record-photo-cell[data-photo-key]');
+    });
+  }
+
+  function toggleRecordCard(recordId) {
+    const nextCard = container.querySelector(`.record-card[data-record-id="${recordId}"]`);
+    if (!nextCard) return;
+
+    const openedCards = Array.from(container.querySelectorAll('.record-card.expanded'));
+    const shouldCollapseCurrent = nextCard.classList.contains('expanded');
+
+    openedCards.forEach((card) => {
+      if (card === nextCard && !shouldCollapseCurrent) return;
+      collapseRecordCard(card);
+    });
+
+    if (shouldCollapseCurrent) {
+      state.expandedRecordId = null;
+      return;
+    }
+
+    state.expandedRecordId = recordId;
+    expandRecordCard(nextCard);
+  }
+
+  function expandRecordCard(card) {
+    const detail = card.querySelector('.record-photo-detail');
+    if (!detail) return;
+
+    detail.hidden = false;
+    detail.style.maxHeight = '0';
+    detail.style.paddingTop = '0';
+    detail.style.paddingBottom = '0';
+    detail.style.opacity = '0';
+    detail.style.transform = 'translateY(-6px)';
+    detail.style.pointerEvents = 'none';
+
+    card.classList.add('expanded');
+    syncRecordToggle(card, true);
+
+    requestAnimationFrame(() => {
+      detail.style.paddingTop = '10px';
+      detail.style.paddingBottom = '14px';
+      detail.style.maxHeight = `${detail.scrollHeight}px`;
+      detail.style.opacity = '1';
+      detail.style.transform = 'translateY(0)';
+      detail.style.pointerEvents = 'auto';
+    });
+
+    registerExpandTransitionEnd(detail, () => card.classList.contains('expanded'));
+    hydratePhotoCells(card, '.record-photo-cell[data-photo-key]');
+  }
+
+  function collapseRecordCard(card) {
+    const detail = card.querySelector('.record-photo-detail');
+    if (!detail) return;
+
+    detail.hidden = false;
+    detail.style.maxHeight = `${detail.scrollHeight}px`;
+    detail.style.opacity = '1';
+    detail.style.transform = 'translateY(0)';
+    detail.style.pointerEvents = 'auto';
+
+    requestAnimationFrame(() => {
+      card.classList.remove('expanded');
+      syncRecordToggle(card, false);
+      detail.style.maxHeight = '0';
+      detail.style.paddingTop = '0';
+      detail.style.paddingBottom = '0';
+      detail.style.opacity = '0';
+      detail.style.transform = 'translateY(-6px)';
+      detail.style.pointerEvents = 'none';
+    });
+
+    registerCollapseTransitionEnd(detail, () => !card.classList.contains('expanded'));
+  }
+
+  function syncRecordToggle(card, isExpanded) {
+    const toggle = card.querySelector('[data-record-toggle]');
+    if (!toggle) return;
+
+    toggle.classList.toggle('expanded', isExpanded);
+    toggle.setAttribute('aria-expanded', isExpanded ? 'true' : 'false');
+
+    const label = toggle.querySelector('[data-record-toggle-label]');
+    if (label) {
+      label.textContent = isExpanded
+        ? (toggle.dataset.expandedLabel || '收起')
+        : (toggle.dataset.collapsedLabel || '查看照片');
+    }
   }
 
   function openPhotoViewer(photoKeys, startIndex = 0) {
@@ -915,7 +1085,7 @@ function renderSubmissionRecords(records, selectedChild, expandedRecordId) {
         const isExpanded = expandedRecordId === submission.id;
 
         return `
-          <div class="record-card" data-stagger>
+          <div class="record-card ${isExpanded ? 'expanded' : ''}" data-stagger data-record-id="${submission.id}">
             <div class="record-head">
               <div class="record-title-wrap">
                 <div class="record-title">${escapeHtml(submission.taskTitle || '\u4efb\u52a1')}</div>
@@ -926,9 +1096,17 @@ function renderSubmissionRecords(records, selectedChild, expandedRecordId) {
               <div class="record-head-side">
                 <span class="record-status-pill ${submission.status}">${escapeHtml(recordStatusLabel(submission.status, submission.points || submission.taskPoints || 0))}</span>
                 ${photoState === 'available' ? `
-                  <button class="record-photo-toggle" data-record-toggle="${submission.id}" type="button">
-                    ${icon('image', 14)}
-                    ${isExpanded ? '\u6536\u8d77' : `\u67e5\u770b\u7167\u7247 (${photoKeys.length})`}
+                  <button
+                    class="record-photo-toggle ${isExpanded ? 'expanded' : ''}"
+                    data-record-toggle="${submission.id}"
+                    data-collapsed-label="\u67e5\u770b\u7167\u7247 (${photoKeys.length})"
+                    data-expanded-label="\u6536\u8d77"
+                    aria-expanded="${isExpanded ? 'true' : 'false'}"
+                    type="button"
+                  >
+                    <span class="record-photo-toggle-icon">${icon('image', 14)}</span>
+                    <span data-record-toggle-label>${isExpanded ? '\u6536\u8d77' : `\u67e5\u770b\u7167\u7247 (${photoKeys.length})`}</span>
+                    <span class="record-photo-toggle-arrow">${icon('chevronRight', 14)}</span>
                   </button>
                 ` : ''}
               </div>
@@ -951,13 +1129,15 @@ function renderSubmissionRecords(records, selectedChild, expandedRecordId) {
               ` : ''}
             </div>
 
-            ${photoState === 'available' && isExpanded ? `
-              <div class="record-photo-strip" data-photo-keys='${JSON.stringify(photoKeys)}'>
-                ${photoKeys.map((key, index) => `
-                  <div class="record-photo-cell" data-photo-key="${key}" data-photo-idx="${index}">
-                    <span class="photo-loading">${icon('image', 18)}</span>
-                  </div>
-                `).join('')}
+            ${photoState === 'available' ? `
+              <div class="record-photo-detail" ${isExpanded ? '' : 'hidden'}>
+                <div class="record-photo-strip" data-photo-keys='${JSON.stringify(photoKeys)}'>
+                  ${photoKeys.map((key, index) => `
+                    <div class="record-photo-cell" data-photo-key="${key}" data-photo-idx="${index}">
+                      <span class="photo-loading">${icon('image', 18)}</span>
+                    </div>
+                  `).join('')}
+                </div>
               </div>
             ` : ''}
           </div>
