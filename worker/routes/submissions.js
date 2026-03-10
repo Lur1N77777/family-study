@@ -43,14 +43,21 @@ async function listSubmissions(request, env, user) {
   `;
   const params = [user.familyCode];
 
+  if (user.role === 'child') {
+    if (childId && childId !== user.id) {
+      return errorResponse('无权查看该学生的提交记录', 403, env);
+    }
+
+    sql += ' AND s.child_id = ?';
+    params.push(user.id);
+  } else if (childId) {
+    sql += ' AND s.child_id = ?';
+    params.push(childId);
+  }
+
   if (status) {
     sql += ' AND s.status = ?';
     params.push(status);
-  }
-
-  if (childId) {
-    sql += ' AND s.child_id = ?';
-    params.push(childId);
   }
 
   sql += ' ORDER BY s.created_at DESC LIMIT 50';
@@ -97,24 +104,30 @@ async function createSubmission(request, env, user) {
     return errorResponse(getSubmissionBlockedMessage(task), 400, env);
   }
 
-  const existingSubmission = await findLatestSubmissionInWindow(env.DB, taskId, user.id, submissionWindow);
-  if (existingSubmission) {
-    if (existingSubmission.status === 'pending') {
-      return errorResponse('本周期已经提交过了，请等待家长审核', 400, env);
-    }
+  const submissionId = uid();
+  const insertResult = await insertSubmissionIfWindowAvailable(env.DB, {
+    id: submissionId,
+    taskId,
+    childId: user.id,
+    photoKeyValue,
+    now,
+    window: submissionWindow,
+  });
 
-    if (existingSubmission.status === 'approved') {
-      return errorResponse('本周期已经完成这个任务了', 400, env);
-    }
+  if (wasMutationApplied(insertResult)) {
+    return jsonResponse({ id: submissionId, status: 'pending' }, env, 201);
   }
 
-  const id = uid();
-  await env.DB.prepare(
-    `INSERT INTO submissions (id, task_id, child_id, status, photo_key, points, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  ).bind(id, taskId, user.id, 'pending', photoKeyValue, 0, now).run();
+  const blockingSubmission = await findBlockingSubmissionInWindow(env.DB, taskId, user.id, submissionWindow);
+  if (blockingSubmission?.status === 'pending') {
+    return errorResponse('本周期已经提交过了，请等待家长审核', 400, env);
+  }
 
-  return jsonResponse({ id, status: 'pending' }, env, 201);
+  if (blockingSubmission?.status === 'approved') {
+    return errorResponse('本周期已经完成这个任务了', 400, env);
+  }
+
+  return errorResponse('当前周期不能重复提交这个任务', 400, env);
 }
 
 async function reviewSubmission(request, env, user, path) {
@@ -122,16 +135,16 @@ async function reviewSubmission(request, env, user, path) {
     return errorResponse('权限不足', 403, env);
   }
 
-  const subId = path.split('/').pop();
+  const submissionId = path.split('/').pop();
   const { action, reason } = await request.json();
-  const submission = await env.DB.prepare('SELECT * FROM submissions WHERE id = ?').bind(subId).first();
+  const submission = await env.DB.prepare('SELECT * FROM submissions WHERE id = ?').bind(submissionId).first();
   if (!submission) {
     return errorResponse('提交记录不存在', 404, env);
   }
 
-  const child = await env.DB.prepare('SELECT id, username, family_code FROM users WHERE id = ?')
-    .bind(submission.child_id)
-    .first();
+  const child = await env.DB.prepare(
+    'SELECT id, username, family_code FROM users WHERE id = ?'
+  ).bind(submission.child_id).first();
   if (!child || child.family_code !== user.familyCode) {
     return errorResponse('无权操作这条提交记录', 403, env);
   }
@@ -141,23 +154,25 @@ async function reviewSubmission(request, env, user, path) {
   }
 
   if (action === 'approve') {
-    return approveSubmission(env, user, submission, subId, child);
+    return approveSubmission(env, user, submission, submissionId, child);
   }
 
   if (action === 'reject') {
-    return rejectSubmission(env, user, submission, subId, child, reason);
+    return rejectSubmission(env, user, submission, submissionId, child, reason);
   }
 
   return errorResponse('无效的审核操作', 400, env);
 }
 
-async function approveSubmission(env, user, submission, subId, child) {
-  const task = await env.DB.prepare('SELECT points, title FROM tasks WHERE id = ?').bind(submission.task_id).first();
+async function approveSubmission(env, user, submission, submissionId, child) {
+  const task = await env.DB.prepare(
+    'SELECT points, title FROM tasks WHERE id = ?'
+  ).bind(submission.task_id).first();
   const points = task?.points || 0;
   const reviewedAt = Date.now();
   const photoAvailableUntil = getSubmissionPhotoAvailableUntil(submission, reviewedAt);
 
-  await env.DB.batch([
+  const results = await env.DB.batch([
     env.DB.prepare(
       `UPDATE submissions
           SET status = ?,
@@ -166,19 +181,45 @@ async function approveSubmission(env, user, submission, subId, child) {
               photo_available_until = ?,
               photo_cleared_at = NULL,
               reject_reason = ?
-        WHERE id = ?`
-    ).bind('approved', points, reviewedAt, photoAvailableUntil, `approved_by:${user.username}`, subId),
-    env.DB.prepare('UPDATE users SET points = points + ? WHERE id = ?')
-      .bind(points, submission.child_id),
-    env.DB.prepare('INSERT INTO activity_log (id, type, message, family_code, timestamp) VALUES (?, ?, ?, ?, ?)')
-      .bind(
-        uid(),
-        'task_approved',
-        `${user.username}通过了 ${child?.username || '学生'} 的《${task?.title || '任务'}》，发放 ${points} 积分`,
-        child?.family_code || user.familyCode,
-        reviewedAt,
-      ),
+        WHERE id = ? AND status = ?`
+    ).bind('approved', points, reviewedAt, photoAvailableUntil, `approved_by:${user.username}`, submissionId, 'pending'),
+    env.DB.prepare(
+      `UPDATE users
+          SET points = points + ?
+        WHERE id = ?
+          AND EXISTS (
+            SELECT 1
+              FROM submissions
+             WHERE id = ?
+               AND status = ?
+               AND reviewed_at = ?
+          )`
+    ).bind(points, submission.child_id, submissionId, 'approved', reviewedAt),
+    env.DB.prepare(
+      `INSERT INTO activity_log (id, type, message, family_code, timestamp)
+       SELECT ?, ?, ?, ?, ?
+        WHERE EXISTS (
+          SELECT 1
+            FROM submissions
+           WHERE id = ?
+             AND status = ?
+             AND reviewed_at = ?
+        )`
+    ).bind(
+      uid(),
+      'task_approved',
+      `${user.username}通过了 ${child?.username || '学生'} 的《${task?.title || '任务'}》，发放 ${points} 积分`,
+      child?.family_code || user.familyCode,
+      reviewedAt,
+      submissionId,
+      'approved',
+      reviewedAt,
+    ),
   ]);
+
+  if (!wasMutationApplied(results?.[0])) {
+    return errorResponse('这条提交已经审核过了', 400, env);
+  }
 
   return jsonResponse({
     success: true,
@@ -186,14 +227,16 @@ async function approveSubmission(env, user, submission, subId, child) {
   }, env);
 }
 
-async function rejectSubmission(env, user, submission, subId, child, reason) {
-  const task = await env.DB.prepare('SELECT title FROM tasks WHERE id = ?').bind(submission.task_id).first();
+async function rejectSubmission(env, user, submission, submissionId, child, reason) {
+  const task = await env.DB.prepare(
+    'SELECT title FROM tasks WHERE id = ?'
+  ).bind(submission.task_id).first();
   const reviewedAt = Date.now();
   const rejectReason = (reason || '').trim();
   const rejectNote = `rejected_by:${user.username}|${rejectReason || '未说明原因'}`;
   const photoAvailableUntil = getSubmissionPhotoAvailableUntil(submission, reviewedAt);
 
-  await env.DB.batch([
+  const results = await env.DB.batch([
     env.DB.prepare(
       `UPDATE submissions
           SET status = ?,
@@ -201,17 +244,33 @@ async function rejectSubmission(env, user, submission, subId, child, reason) {
               reviewed_at = ?,
               photo_available_until = ?,
               photo_cleared_at = NULL
-        WHERE id = ?`
-    ).bind('rejected', rejectNote, reviewedAt, photoAvailableUntil, subId),
-    env.DB.prepare('INSERT INTO activity_log (id, type, message, family_code, timestamp) VALUES (?, ?, ?, ?, ?)')
-      .bind(
-        uid(),
-        'task_rejected',
-        `${user.username}驳回了 ${child?.username || '学生'} 的《${task?.title || '任务'}》`,
-        child?.family_code || user.familyCode,
-        reviewedAt,
-      ),
+        WHERE id = ? AND status = ?`
+    ).bind('rejected', rejectNote, reviewedAt, photoAvailableUntil, submissionId, 'pending'),
+    env.DB.prepare(
+      `INSERT INTO activity_log (id, type, message, family_code, timestamp)
+       SELECT ?, ?, ?, ?, ?
+        WHERE EXISTS (
+          SELECT 1
+            FROM submissions
+           WHERE id = ?
+             AND status = ?
+             AND reviewed_at = ?
+        )`
+    ).bind(
+      uid(),
+      'task_rejected',
+      `${user.username}驳回了 ${child?.username || '学生'} 的《${task?.title || '任务'}》`,
+      child?.family_code || user.familyCode,
+      reviewedAt,
+      submissionId,
+      'rejected',
+      reviewedAt,
+    ),
   ]);
+
+  if (!wasMutationApplied(results?.[0])) {
+    return errorResponse('这条提交已经审核过了', 400, env);
+  }
 
   return jsonResponse({
     success: true,
@@ -223,20 +282,71 @@ function getSubmissionPhotoAvailableUntil(submission, reviewedAt) {
   return parsePhotoKeys(submission.photo_key).length ? getPhotoAvailableUntil(reviewedAt) : null;
 }
 
-async function findLatestSubmissionInWindow(db, taskId, childId, window) {
-  let query = 'SELECT id, status FROM submissions WHERE task_id = ? AND child_id = ?';
-  const params = [taskId, childId];
+async function insertSubmissionIfWindowAvailable(db, {
+  id,
+  taskId,
+  childId,
+  photoKeyValue,
+  now,
+  window,
+}) {
+  let sql = `
+    INSERT INTO submissions (id, task_id, child_id, status, photo_key, points, created_at)
+    SELECT ?, ?, ?, ?, ?, ?, ?
+    WHERE NOT EXISTS (
+      SELECT 1
+        FROM submissions
+       WHERE task_id = ?
+         AND child_id = ?
+         AND status IN (?, ?)
+         AND created_at >= ?
+  `;
+  const params = [
+    id,
+    taskId,
+    childId,
+    'pending',
+    photoKeyValue,
+    0,
+    now,
+    taskId,
+    childId,
+    'pending',
+    'approved',
+    window.startAt,
+  ];
 
-  if (window.endAt == null) {
-    query += ' AND created_at >= ?';
-    params.push(window.startAt);
-  } else {
-    query += ' AND created_at >= ? AND created_at < ?';
-    params.push(window.startAt, window.endAt);
+  if (window.endAt != null) {
+    sql += '\n         AND created_at < ?';
+    params.push(window.endAt);
+  }
+
+  sql += '\n    )';
+  return db.prepare(sql).bind(...params).run();
+}
+
+async function findBlockingSubmissionInWindow(db, taskId, childId, window) {
+  let query = `
+    SELECT id, status
+      FROM submissions
+     WHERE task_id = ?
+       AND child_id = ?
+       AND status IN (?, ?)
+       AND created_at >= ?
+  `;
+  const params = [taskId, childId, 'pending', 'approved', window.startAt];
+
+  if (window.endAt != null) {
+    query += ' AND created_at < ?';
+    params.push(window.endAt);
   }
 
   query += ' ORDER BY created_at DESC LIMIT 1';
   return db.prepare(query).bind(...params).first();
+}
+
+function wasMutationApplied(result) {
+  return Boolean(result?.success && result?.meta?.changes);
 }
 
 function getSubmissionBlockedMessage(task) {

@@ -8,6 +8,7 @@ import { store } from '../../utils/store.js';
 import { toast } from '../../utils/notification.js';
 import { staggerIn, haptic } from '../../utils/animations.js';
 import { showBottomNav } from '../../utils/nav.js';
+import { enhanceSegmentedControls, runViewTransition } from '../../utils/segmented-control.js';
 
 export async function renderStudentShop(container) {
   container.innerHTML = `<div style="padding:var(--space-8);text-align:center;color:var(--color-text-tertiary)">加载中...</div>`;
@@ -17,6 +18,7 @@ export async function renderStudentShop(container) {
   const products = await store.getProducts();
 
   let activeCategory = 'all';
+  let hasAnimatedIn = false;
 
   function render() {
     const points = user.points || 0;
@@ -32,7 +34,7 @@ export async function renderStudentShop(container) {
           </div>
         </div>
 
-        <div class="tabs">
+        <div class="tabs" data-segmented="student-shop-category">
           <button class="tab ${activeCategory === 'all' ? 'active' : ''}" data-cat="all">全部</button>
           <button class="tab ${activeCategory === 'virtual' ? 'active' : ''}" data-cat="virtual">权益</button>
           <button class="tab ${activeCategory === 'physical' ? 'active' : ''}" data-cat="physical">实物</button>
@@ -145,10 +147,15 @@ export async function renderStudentShop(container) {
       </style>
     `;
 
+    enhanceSegmentedControls(container);
+
     container.querySelectorAll('.tab[data-cat]').forEach((tab) => {
       tab.onclick = () => {
-        activeCategory = tab.dataset.cat;
-        render();
+        if (activeCategory === tab.dataset.cat) return;
+        runViewTransition(() => {
+          activeCategory = tab.dataset.cat;
+          render();
+        });
       };
     });
 
@@ -161,7 +168,10 @@ export async function renderStudentShop(container) {
       };
     });
 
-    staggerIn(container, '[data-stagger]');
+    if (!hasAnimatedIn) {
+      staggerIn(container, '[data-stagger]');
+      hasAnimatedIn = true;
+    }
     showBottomNav('child', 'shop');
   }
 

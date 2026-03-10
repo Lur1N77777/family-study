@@ -9,6 +9,7 @@ import { toast } from '../../utils/notification.js';
 import { haptic } from '../../utils/animations.js';
 import { showBottomNav } from '../../utils/nav.js';
 import { escapeHtml } from '../../utils/escape.js';
+import { enhanceSegmentedControls, runViewTransition } from '../../utils/segmented-control.js';
 
 export async function renderParentNotify(container) {
   container.innerHTML = `<div style="padding:var(--space-8);text-align:center;color:var(--color-text-tertiary)">加载中...</div>`;
@@ -37,8 +38,12 @@ export async function renderParentNotify(container) {
 
   let selectedChild = 'all'; // 'all' or childId
   let customMessage = '';
+  let hasAnimatedIn = false;
 
   function render() {
+    const introClass = hasAnimatedIn ? '' : 'animate-fade-in-up';
+    const staggerClass = (value) => (hasAnimatedIn ? '' : `animate-fade-in-up ${value}`.trim());
+
     container.innerHTML = `
       <div class="page notify-page">
         <div class="page-header">
@@ -47,7 +52,7 @@ export async function renderParentNotify(container) {
         </div>
 
         ${children.length > 0 ? `
-          <div class="child-filter animate-fade-in-up">
+          <div class="child-filter ${introClass}" data-segmented="parent-notify-child" data-segmented-scroll="true">
             <button class="child-chip ${selectedChild === 'all' ? 'active' : ''}" data-child="all">
               全部孩子
             </button>
@@ -61,7 +66,7 @@ export async function renderParentNotify(container) {
         ` : ''}
 
         <!-- 预设快捷消息 -->
-        <section class="notify-section animate-fade-in-up stagger-2">
+        <section class="notify-section ${staggerClass('stagger-2')}">
           <h2 class="section-title">快捷消息</h2>
           <div class="preset-grid">
             ${presetMessages.map(p => `
@@ -74,7 +79,7 @@ export async function renderParentNotify(container) {
         </section>
 
         <!-- 自定义消息 -->
-        <section class="notify-section animate-fade-in-up stagger-3">
+        <section class="notify-section ${staggerClass('stagger-3')}">
           <h2 class="section-title">自定义消息</h2>
           <div class="input-group">
             <input class="input" type="text" id="notify-title" placeholder="通知标题（选填）" value="" />
@@ -85,13 +90,13 @@ export async function renderParentNotify(container) {
         </section>
 
         <!-- 发送按钮 -->
-        <div class="notify-actions animate-fade-in-up stagger-4">
+        <div class="notify-actions ${staggerClass('stagger-4')}">
           <button class="btn btn-primary btn-lg btn-block" id="send-notify-btn" disabled>
             ${icon('send', 18)} 发送通知
           </button>
         </div>
 
-        <p class="notify-hint animate-fade-in-up stagger-5">
+        <p class="notify-hint ${staggerClass('stagger-5')}">
           通知会立即推送到孩子的手机屏幕上
         </p>
       </div>
@@ -116,6 +121,8 @@ export async function renderParentNotify(container) {
           margin-bottom: var(--space-1);
           -webkit-overflow-scrolling: touch;
           scrollbar-width: none;
+          --segmented-indicator-bg: var(--color-primary);
+          --segmented-indicator-shadow: var(--shadow-md);
         }
         .child-filter::-webkit-scrollbar { display: none; }
 
@@ -139,6 +146,11 @@ export async function renderParentNotify(container) {
           background: var(--color-primary);
           color: white;
           box-shadow: var(--shadow-md);
+        }
+        .child-filter.segmented-enhanced .child-chip.active {
+          background: transparent;
+          color: white;
+          box-shadow: none;
         }
 
         .child-chip-avatar { font-size: 1.1rem; }
@@ -190,11 +202,23 @@ export async function renderParentNotify(container) {
       </style>
     `;
 
+    const childFilter = container.querySelector('.child-filter');
+    if (childFilter) {
+      childFilter.querySelectorAll('.child-chip').forEach((button) => {
+        button.dataset.segmentedItem = 'true';
+      });
+    }
+
+    enhanceSegmentedControls(container);
+
     // 孩子筛选
-    container.querySelectorAll('.child-chip').forEach(chip => {
+    container.querySelectorAll('.child-chip').forEach((chip) => {
       chip.onclick = () => {
-        selectedChild = chip.dataset.child;
-        render();
+        if (selectedChild === chip.dataset.child) return;
+        runViewTransition(() => {
+          selectedChild = chip.dataset.child;
+          render();
+        });
       };
     });
 
@@ -273,6 +297,7 @@ export async function renderParentNotify(container) {
       btn.innerHTML = `${icon('send', 18)} 发送通知`;
     };
 
+    hasAnimatedIn = true;
     showBottomNav('parent', 'notify');
   }
 

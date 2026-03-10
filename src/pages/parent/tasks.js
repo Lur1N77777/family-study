@@ -5,6 +5,7 @@ import { toast } from '../../utils/notification.js';
 import { staggerIn, haptic } from '../../utils/animations.js';
 import { showBottomNav } from '../../utils/nav.js';
 import { escapeHtml } from '../../utils/escape.js';
+import { enhanceSegmentedControls, runViewTransition } from '../../utils/segmented-control.js';
 import {
   cancelExpandableAnimations,
   queueExpandableFrame,
@@ -23,6 +24,7 @@ export async function renderParentTasks(container) {
     activeType: 'all',
     expandedTaskId: null,
   };
+  let hasAnimatedIn = false;
 
   await loadData();
   render();
@@ -64,7 +66,7 @@ export async function renderParentTasks(container) {
           <span class="summary-chip ${overdueCount ? 'is-alert' : ''}">${overdueCount} 个逾期</span>
         </div>
 
-        <div class="tabs task-tabs compact-task-tabs">
+        <div class="tabs task-tabs compact-task-tabs" data-segmented="parent-tasks-type">
           ${TASK_TYPES.map((type) => `
             <button class="tab ${state.activeType === type ? 'active' : ''}" data-filter="${type}" type="button">
               ${taskTypeLabel(type)}
@@ -185,18 +187,25 @@ export async function renderParentTasks(container) {
       </style>
     `;
 
+    enhanceSegmentedControls(container);
     bindTasks(tasks);
     primeExpandedCards();
     showBottomNav('parent', 'tasks');
-    staggerIn(container, '[data-stagger]');
+    if (!hasAnimatedIn) {
+      staggerIn(container, '[data-stagger]');
+      hasAnimatedIn = true;
+    }
   }
 
   function bindTasks(visibleTasks) {
     container.querySelector('#task-add-btn')?.addEventListener('click', () => openTaskModal());
 
     container.querySelectorAll('[data-filter]').forEach((button) => button.addEventListener('click', () => {
-      state.activeType = button.dataset.filter;
-      render();
+      if (state.activeType === button.dataset.filter) return;
+      runViewTransition(() => {
+        state.activeType = button.dataset.filter;
+        render();
+      });
     }));
 
     container.querySelectorAll('[data-expand]').forEach((button) => button.addEventListener('click', () => {

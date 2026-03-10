@@ -10,6 +10,7 @@ import { staggerIn, haptic, setupSwipeToDismiss } from '../../utils/animations.j
 import { showBottomNav } from '../../utils/nav.js';
 import { escapeHtml } from '../../utils/escape.js';
 import { PRODUCT_EMOJIS, sanitizeEmoji } from '../../utils/emoji.js';
+import { enhanceSegmentedControls, syncSegmentedControl } from '../../utils/segmented-control.js';
 
 const EMOJIS = PRODUCT_EMOJIS;
 
@@ -111,7 +112,7 @@ function renderPage(container, products, userId, familyCode) {
         <div class="input-group"><label class="input-label">描述</label><input class="input" id="product-desc" placeholder="简短描述" value="${escapeHtml(existingProduct?.description || '')}"></div>
         <div class="input-group">
           <label class="input-label">类别</label>
-          <div class="tabs" style="margin-bottom:0">
+          <div class="tabs" style="margin-bottom:0" data-segmented="parent-product-category">
             <button class="tab ${category === 'virtual' ? 'active' : ''}" type="button" data-category="virtual">权益</button>
             <button class="tab ${category === 'physical' ? 'active' : ''}" type="button" data-category="physical">实物</button>
           </div>
@@ -123,6 +124,8 @@ function renderPage(container, products, userId, familyCode) {
         </div>
       </form>
     `;
+
+    enhanceSegmentedControls(body);
 
     body.querySelectorAll('.emoji-btn').forEach((button) => {
       button.onclick = () => {
@@ -141,6 +144,7 @@ function renderPage(container, products, userId, familyCode) {
         body.querySelectorAll('.tab[data-category]').forEach((item) => item.classList.remove('active'));
         button.classList.add('active');
         category = button.dataset.category;
+        syncSegmentedControl(body.querySelector('[data-segmented="parent-product-category"]'));
       };
     });
 

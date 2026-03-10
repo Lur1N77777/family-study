@@ -13,6 +13,7 @@ import { showBottomNav } from '../../utils/nav.js';
 import { api } from '../../utils/api.js';
 import { canPreviewReviewedSubmissionPhotos, getSubmissionPhotoKeys, getSubmissionPhotoState } from '../../utils/submission-photos.js';
 import { escapeHtml } from '../../utils/escape.js';
+import { enhanceSegmentedControls, runViewTransition } from '../../utils/segmented-control.js';
 import {
   cancelExpandableAnimations,
   queueExpandableFrame,
@@ -38,6 +39,7 @@ export async function renderStudentTasks(container) {
   let viewerPhotos = [];
   let viewerIndex = 0;
   let viewerKeyHandler = null;
+  let hasAnimatedIn = false;
 
   // 閳光偓閳光偓 閹绘劒姘?Modal 閻樿埖鈧?閳光偓閳光偓
   let submitTaskId = null;
@@ -73,7 +75,7 @@ export async function renderStudentTasks(container) {
           <p class="page-subtitle">${tasks.length} 个任务，查看今天和本周期的完成情况</p>
         </div>
 
-        <div class="tabs">
+        <div class="tabs" data-segmented="student-tasks-type">
           <button class="tab ${activeTab === 'all' ? 'active' : ''}" data-tab="all">全部<span class="tab-count">${counts.all}</span></button>
           <button class="tab ${activeTab === 'daily' ? 'active' : ''}" data-tab="daily">每日<span class="tab-count">${counts.daily}</span></button>
           <button class="tab ${activeTab === 'weekly' ? 'active' : ''}" data-tab="weekly">每周<span class="tab-count">${counts.weekly}</span></button>
@@ -679,10 +681,15 @@ export async function renderStudentTasks(container) {
     `;
 
     // Tab 娴滃娆?
+    enhanceSegmentedControls(container);
+
     container.querySelectorAll('.tab').forEach(tab => {
       tab.onclick = () => {
-        activeTab = tab.dataset.tab;
-        render();
+        if (activeTab === tab.dataset.tab) return;
+        runViewTransition(() => {
+          activeTab = tab.dataset.tab;
+          render();
+        });
       };
     });
 
@@ -751,7 +758,10 @@ export async function renderStudentTasks(container) {
 
     restoreExpandedStudentRecords();
 
-    staggerIn(container, '[data-stagger]');
+    if (!hasAnimatedIn) {
+      staggerIn(container, '[data-stagger]');
+      hasAnimatedIn = true;
+    }
     showBottomNav('child', 'tasks');
   }
 
