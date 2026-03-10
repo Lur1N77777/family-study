@@ -400,6 +400,34 @@ body:has(.photo-viewer-overlay[style*="display:flex"]) {
     box-shadow: var(--shadow-sm);
 }
 
+.tabs.segmented-enhanced,
+[data-segmented].segmented-enhanced {
+    position: relative;
+    isolation: isolate;
+}
+
+.segmented-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    background: var(--segmented-indicator-bg, var(--color-surface));
+    box-shadow: var(--segmented-indicator-shadow, var(--shadow-sm));
+    pointer-events: none;
+    z-index: 0;
+    will-change: transform, width, height;
+}
+
+.tabs.segmented-enhanced .tab,
+[data-segmented].segmented-enhanced > button {
+    position: relative;
+    z-index: 1;
+}
+
+.tabs.segmented-enhanced .tab.active {
+    background: transparent;
+    box-shadow: none;
+}
+
 .tab-count {
     margin-left: 4px;
     padding: 2px 6px;
@@ -414,6 +442,14 @@ body:has(.photo-viewer-overlay[style*="display:flex"]) {
 .tab.active .tab-count {
     background: var(--color-primary-soft);
     color: var(--color-primary);
+}
+
+@supports (view-transition-name: none) {
+    ::view-transition-old(root),
+    ::view-transition-new(root) {
+        animation-duration: 180ms;
+        animation-timing-function: cubic-bezier(.22, 1, .36, 1);
+    }
 }
 
 /* ── Badge 标签 ── */

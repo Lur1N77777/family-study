@@ -7,6 +7,7 @@ import { getPhoto, parsePhotoKeys } from '../../utils/camera.js';
 import { canPreviewReviewedSubmissionPhotos, getSubmissionPhotoKeys, getSubmissionPhotoState } from '../../utils/submission-photos.js';
 import { showBottomNav, refreshNavBadge } from '../../utils/nav.js';
 import { escapeHtml } from '../../utils/escape.js';
+import { enhanceSegmentedControls, runViewTransition } from '../../utils/segmented-control.js';
 import {
   cancelExpandableAnimations,
   queueExpandableFrame,
@@ -39,6 +40,7 @@ export async function renderParentReview(container) {
     viewerIndex: 0,
     viewerKeyHandler: null,
   };
+  let hasAnimatedIn = false;
 
   render();
 
@@ -69,7 +71,7 @@ export async function renderParentReview(container) {
         </div>
 
         ${state.children.length > 1 ? `
-          <div class="child-filter" data-stagger>
+          <div class="child-filter" data-stagger data-segmented="parent-review-child" data-segmented-scroll="true">
             <button class="child-chip ${state.activeChildId === 'all' ? 'active' : ''}" data-child="all" type="button">全部孩子</button>
             ${state.children.map((child) => `
               <button class="child-chip ${state.activeChildId === child.id ? 'active' : ''}" data-child="${child.id}" type="button">
@@ -80,7 +82,7 @@ export async function renderParentReview(container) {
           </div>
         ` : ''}
 
-        <div class="tabs review-tabs" data-stagger>
+        <div class="tabs review-tabs" data-stagger data-segmented="parent-review-main">
           <button class="tab ${state.activeTab === 'tasks' ? 'active' : ''}" data-tab="tasks" type="button">
             任务审核
             ${pendingSubmissions.length ? `<span class="tab-count">${pendingSubmissions.length}</span>` : ''}
@@ -92,7 +94,7 @@ export async function renderParentReview(container) {
         </div>
 
         ${state.activeTab === 'tasks' ? `
-          <div class="review-switch" data-stagger>
+          <div class="review-switch" data-stagger data-segmented="parent-review-task-view">
             <button class="review-switch-btn ${state.taskView === 'pending' ? 'active' : ''}" data-task-view="pending" type="button">
               待审核 <span>${pendingSubmissions.length}</span>
             </button>
@@ -172,6 +174,10 @@ export async function renderParentReview(container) {
           color: var(--color-primary);
           box-shadow: var(--shadow-sm);
         }
+        .review-switch.segmented-enhanced .review-switch-btn.active {
+          background: transparent;
+          box-shadow: none;
+        }
         .review-switch-btn.active span {
           background: color-mix(in srgb, var(--color-primary) 12%, transparent);
         }
@@ -182,6 +188,8 @@ export async function renderParentReview(container) {
           padding-bottom: var(--space-3);
           margin-bottom: 2px;
           scrollbar-width: none;
+          --segmented-indicator-bg: var(--color-primary);
+          --segmented-indicator-shadow: var(--shadow-md);
         }
         .child-filter::-webkit-scrollbar { display: none; }
         .child-chip {
@@ -202,6 +210,11 @@ export async function renderParentReview(container) {
           background: var(--color-primary);
           color: #fff;
           box-shadow: var(--shadow-md);
+        }
+        .child-filter.segmented-enhanced .child-chip.active {
+          background: transparent;
+          color: #fff;
+          box-shadow: none;
         }
         .child-chip-avatar { font-size: 14px; line-height: 1; }
         .review-card,
@@ -584,6 +597,14 @@ export async function renderParentReview(container) {
       </style>
     `;
 
+    const childFilter = container.querySelector('.child-filter');
+    if (childFilter) {
+      childFilter.querySelectorAll('.child-chip').forEach((button) => {
+        button.dataset.segmentedItem = 'true';
+      });
+    }
+
+    enhanceSegmentedControls(container);
     bindEvents();
     if (state.activeTab === 'tasks') {
       if (state.taskView === 'pending') {
@@ -592,25 +613,37 @@ export async function renderParentReview(container) {
         restoreExpandedRecordCards();
       }
     }
-    staggerIn(container, '[data-stagger]');
+    if (!hasAnimatedIn) {
+      staggerIn(container, '[data-stagger]');
+      hasAnimatedIn = true;
+    }
     showBottomNav('parent', 'review');
     refreshNavBadge();
   }
 
   function bindEvents() {
     container.querySelectorAll('[data-tab]').forEach((button) => button.addEventListener('click', () => {
-      state.activeTab = button.dataset.tab;
-      render();
+      if (state.activeTab === button.dataset.tab) return;
+      runViewTransition(() => {
+        state.activeTab = button.dataset.tab;
+        render();
+      });
     }));
 
     container.querySelectorAll('[data-child]').forEach((button) => button.addEventListener('click', () => {
-      state.activeChildId = button.dataset.child;
-      render();
+      if (state.activeChildId === button.dataset.child) return;
+      runViewTransition(() => {
+        state.activeChildId = button.dataset.child;
+        render();
+      });
     }));
 
     container.querySelectorAll('[data-task-view]').forEach((button) => button.addEventListener('click', () => {
-      state.taskView = button.dataset.taskView;
-      render();
+      if (state.taskView === button.dataset.taskView) return;
+      runViewTransition(() => {
+        state.taskView = button.dataset.taskView;
+        render();
+      });
     }));
 
     container.querySelectorAll('[data-record-toggle]').forEach((button) => button.addEventListener('click', () => {

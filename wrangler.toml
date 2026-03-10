@@ -22,5 +22,21 @@ CORS_ORIGIN = "*"
 crons = ["5 16 * * *"]
 
 # Pages 配置（前端）
+[env.dev]
+name = "family-study-api-dev"
+
+[env.dev.vars]
+JWT_SECRET = "family-study-dev-only-secret-20260310"
+CORS_ORIGIN = "*"
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "family-study-db-dev"
+database_id = "9640bf82-0779-4670-934a-2593761eac3b"
+
+[[env.dev.r2_buckets]]
+binding = "PHOTOS"
+bucket_name = "family-study-photos-dev"
+
 [site]
 bucket = "./dist"

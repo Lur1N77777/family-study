@@ -6,6 +6,7 @@ import { icon } from '../utils/icons.js';
 import { auth } from '../utils/auth.js';
 import { router } from '../utils/router.js';
 import { toast } from '../utils/notification.js';
+import { enhanceSegmentedControls, syncSegmentedControl } from '../utils/segmented-control.js';
 
 export function renderLogin(container, isRegister = false) {
   if (auth.isLoggedIn()) {
@@ -54,7 +55,7 @@ export function renderLogin(container, isRegister = false) {
             ${showRegister && role === 'parent' ? `
               <div class="input-group">
                 <label class="input-label">家庭模式</label>
-                <div class="tabs" style="margin-bottom:0">
+                <div class="tabs" style="margin-bottom:0" data-segmented="login-family-mode">
                   <button class="tab active" type="button" data-mode="create">创建新家庭</button>
                   <button class="tab" type="button" data-mode="join">加入已有家庭</button>
                 </div>
@@ -184,10 +185,13 @@ export function renderLogin(container, isRegister = false) {
       render();
     };
 
+    enhanceSegmentedControls(container);
+
     container.querySelectorAll('.tab[data-mode]').forEach((tab) => {
       tab.onclick = () => {
         container.querySelectorAll('.tab[data-mode]').forEach((item) => item.classList.remove('active'));
         tab.classList.add('active');
+        syncSegmentedControl(container.querySelector('[data-segmented="login-family-mode"]'));
         const joinGroup = container.querySelector('#join-code-group');
         const hintText = container.querySelector('#hint-text');
 
