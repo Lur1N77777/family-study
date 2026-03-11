@@ -12,6 +12,13 @@ import { staggerIn, haptic } from '../../utils/animations.js';
 import { showBottomNav } from '../../utils/nav.js';
 import { api } from '../../utils/api.js';
 import { canPreviewReviewedSubmissionPhotos, getSubmissionPhotoKeys, getSubmissionPhotoState } from '../../utils/submission-photos.js';
+import {
+  SUBMISSION_TEXT_MAX_LENGTH,
+  hasSubmissionText,
+  normalizeSubmissionText,
+  renderSubmissionTextBlock,
+  setupSubmissionTextBlocks,
+} from '../../utils/submission-text.js';
 import { escapeHtml } from '../../utils/escape.js';
 import { enhanceSegmentedControls, runViewTransition } from '../../utils/segmented-control.js';
 import {
@@ -44,6 +51,7 @@ export async function renderStudentTasks(container) {
   // 閳光偓閳光偓 閹绘劒姘?Modal 閻樿埖鈧?閳光偓閳光偓
   let submitTaskId = null;
   let pendingPhotos = []; // { file: File, previewUrl: string }[]
+  let pendingSubmissionText = '';
 
   function render() {
     const filtered = activeTab === 'all' ? tasks : tasks.filter(t => t.type === activeTab);
@@ -588,6 +596,101 @@ export async function renderStudentTasks(container) {
           text-align: center;
         }
 
+        .submit-text-group {
+          margin-bottom: var(--space-4);
+          padding: 14px;
+          border-radius: 20px;
+          border: 1px solid color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+          background: color-mix(in srgb, var(--color-surface) 97%, white);
+          box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+          transition:
+            border-color .24s cubic-bezier(.16, 1, .3, 1),
+            box-shadow .24s cubic-bezier(.16, 1, .3, 1),
+            background-color .24s cubic-bezier(.16, 1, .3, 1);
+        }
+
+        .submit-text-group:focus-within {
+          border-color: color-mix(in srgb, var(--color-primary) 20%, transparent);
+          background: color-mix(in srgb, var(--color-primary) 2%, var(--color-surface));
+          box-shadow:
+            0 0 0 3px color-mix(in srgb, var(--color-primary) 8%, transparent),
+            0 12px 28px rgba(15, 23, 42, 0.06);
+        }
+
+        .submit-text-head {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-2);
+          margin-bottom: 10px;
+        }
+
+        .submit-text-label {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          height: 24px;
+          padding: 0 8px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+          color: var(--color-primary);
+          font-size: 11px;
+          font-weight: var(--weight-semibold);
+          letter-spacing: 0.02em;
+        }
+
+        .submit-text-counter {
+          flex-shrink: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          height: 24px;
+          padding: 0 8px;
+          border-radius: 999px;
+          background: color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+          color: var(--color-text-secondary);
+          font-size: 11px;
+          font-weight: var(--weight-semibold);
+        }
+
+        .submit-text-hint {
+          margin: 0 0 10px;
+          font-size: 12px;
+          line-height: 1.5;
+          color: var(--color-text-secondary);
+        }
+
+        .submit-textarea {
+          min-height: 112px;
+          resize: vertical;
+          line-height: 1.6;
+          padding: 0;
+          border: none;
+          background: transparent;
+          box-shadow: none;
+        }
+
+        .submit-textarea:focus {
+          border: none;
+          box-shadow: none;
+        }
+
+        .submit-text-meta {
+          margin-top: var(--space-3);
+          padding-top: var(--space-3);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: var(--space-3);
+          font-size: var(--text-xs);
+          color: var(--color-text-tertiary);
+          border-top: 1px solid color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+        }
+
+        .submit-text-meta-note {
+          white-space: nowrap;
+        }
+
         .photo-grid {
           display: grid;
           grid-template-columns: repeat(2, 1fr);
@@ -746,6 +849,7 @@ export async function renderStudentTasks(container) {
         haptic('medium');
         submitTaskId = btn.dataset.taskId;
         pendingPhotos = [];
+        pendingSubmissionText = '';
         openSubmitModal();
       };
     });
@@ -756,6 +860,7 @@ export async function renderStudentTasks(container) {
       };
     });
 
+    setupSubmissionTextBlocks(container);
     restoreExpandedStudentRecords();
 
     if (!hasAnimatedIn) {
@@ -825,6 +930,7 @@ export async function renderStudentTasks(container) {
       detail.style.transform = 'translateY(0)';
       detail.style.pointerEvents = 'auto';
       detail.style.maxHeight = 'none';
+      setupSubmissionTextBlocks(card);
       hydrateReviewRecordPhotos(card);
     });
   }
@@ -856,6 +962,7 @@ export async function renderStudentTasks(container) {
 
     cancelExpandableAnimations(detail);
     detail.hidden = false;
+    setupSubmissionTextBlocks(card);
     const computed = window.getComputedStyle(detail);
     detail.style.maxHeight = `${detail.offsetHeight}px`;
     detail.style.paddingTop = computed.paddingTop === '0px' ? '0' : computed.paddingTop;
@@ -1025,6 +1132,7 @@ export async function renderStudentTasks(container) {
       // 濞撳懐鎮婃０鍕潔 URL
       pendingPhotos.forEach(p => URL.revokeObjectURL(p.previewUrl));
       pendingPhotos = [];
+      pendingSubmissionText = '';
       submitTaskId = null;
     }, 300);
   }
@@ -1032,12 +1140,32 @@ export async function renderStudentTasks(container) {
   function renderSubmitModal() {
     const body = container.querySelector('#submit-modal-body');
     const remaining = 4 - pendingPhotos.length;
+    const hasSubmissionContent = pendingPhotos.length > 0 || hasSubmissionText(pendingSubmissionText);
 
     body.innerHTML = `
       <h2 class="submit-modal-title">\u63d0\u4ea4\u4efb\u52a1</h2>
 
       <div class="photo-count-hint">
         \u5df2\u9009 ${pendingPhotos.length}/4 \u5f20\u7167\u7247${remaining > 0 ? `\uff0c\u8fd8\u53ef\u6dfb\u52a0 ${remaining} \u5f20` : '\uff08\u5df2\u8fbe\u4e0a\u9650\uff09'}
+      </div>
+
+      <div class="input-group submit-text-group">
+        <div class="submit-text-head">
+          <label class="submit-text-label" for="submit-text">\u6587\u5b57\u63d0\u4ea4</label>
+          <span class="submit-text-counter" id="submit-text-count">${pendingSubmissionText.length}/${SUBMISSION_TEXT_MAX_LENGTH}</span>
+        </div>
+        <p class="submit-text-hint">\u8865\u5145\u5b8c\u6210\u8fc7\u7a0b\u3001\u5b66\u4e60\u6536\u83b7\uff0c\u6587\u5b57\u6216\u7167\u7247\u81f3\u5c11\u63d0\u4ea4\u4e00\u9879\u3002</p>
+        <textarea
+          class="input submit-textarea"
+          id="submit-text"
+          rows="4"
+          maxlength="${SUBMISSION_TEXT_MAX_LENGTH}"
+          placeholder="\u53ef\u4ee5\u8865\u5145\u5b8c\u6210\u8fc7\u7a0b\u3001\u5b66\u4e60\u6536\u83b7\uff0c\u4e5f\u652f\u6301\u53ea\u63d0\u4ea4\u6587\u5b57"
+        >${escapeHtml(pendingSubmissionText)}</textarea>
+        <div class="submit-text-meta">
+          <span>\u652f\u6301\u53ea\u63d0\u4ea4\u6587\u5b57\uff0c\u4e5f\u53ef\u642d\u914d\u7167\u7247\u8bf4\u660e</span>
+          <span class="submit-text-meta-note">\u6700\u591a ${SUBMISSION_TEXT_MAX_LENGTH} \u5b57</span>
+        </div>
       </div>
 
       <div class="photo-grid">
@@ -1068,8 +1196,10 @@ export async function renderStudentTasks(container) {
 
       <div class="submit-actions">
         <button class="btn btn-secondary btn-lg" id="btn-cancel-submit">\u53d6\u6d88</button>
-        <button class="btn btn-primary btn-lg" id="btn-confirm-submit" ${pendingPhotos.length === 0 ? 'disabled' : ''}>
-          ${icon('check', 16)} \u63d0\u4ea4 (${pendingPhotos.length}\u5f20)
+        <button class="btn btn-primary btn-lg" id="btn-confirm-submit" ${hasSubmissionContent ? '' : 'disabled'}>
+          ${icon('check', 16)} ${hasSubmissionText(pendingSubmissionText)
+            ? '\u63d0\u4ea4\u5185\u5bb9'
+            : `\u63d0\u4ea4 (${pendingPhotos.length}\u5f20)`}
         </button>
       </div>
     `;
@@ -1114,6 +1244,24 @@ export async function renderStudentTasks(container) {
       albumBtn.onclick = () => pickFromAlbum();
     }
 
+    const textInput = body.querySelector('#submit-text');
+    if (textInput) {
+      textInput.addEventListener('input', () => {
+        pendingSubmissionText = textInput.value.slice(0, SUBMISSION_TEXT_MAX_LENGTH);
+        const counter = body.querySelector('#submit-text-count');
+        if (counter) {
+          counter.textContent = `${pendingSubmissionText.length}/${SUBMISSION_TEXT_MAX_LENGTH}`;
+        }
+        const confirmButton = body.querySelector('#btn-confirm-submit');
+        if (confirmButton) {
+          confirmButton.disabled = !(pendingPhotos.length > 0 || hasSubmissionText(pendingSubmissionText));
+          confirmButton.innerHTML = `${icon('check', 16)} ${hasSubmissionText(pendingSubmissionText)
+            ? '\u63d0\u4ea4\u5185\u5bb9'
+            : `\u63d0\u4ea4 (${pendingPhotos.length}\u5f20)`}`;
+        }
+      });
+    }
+
     // 閸欐牗绉?
     body.querySelector('#btn-cancel-submit').onclick = () => closeSubmitModal();
 
@@ -1141,24 +1289,32 @@ export async function renderStudentTasks(container) {
   }
 
   async function doSubmit() {
-    if (!submitTaskId || pendingPhotos.length === 0) return;
+    const normalizedText = normalizeSubmissionText(pendingSubmissionText);
+    if (!submitTaskId || (!pendingPhotos.length && !normalizedText)) return;
 
     const submitBtn = container.querySelector('#btn-confirm-submit');
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '\u4e0a\u4f20\u4e2d...';
+    submitBtn.innerHTML = pendingPhotos.length > 0 ? '\u4e0a\u4f20\u4e2d...' : '\u63d0\u4ea4\u4e2d...';
 
     try {
       // 1. 閹靛綊鍣烘稉濠佺炊閻撗呭
-      toast('\u6b63\u5728\u4e0a\u4f20\u7167\u7247...', 'info');
-      const files = pendingPhotos.map(p => p.file);
-      const uploadRes = await api.uploadMultiplePhotos(files);
-      if (uploadRes.error) throw new Error(uploadRes.error);
+      if (pendingPhotos.length > 0) {
+        toast('\u6b63\u5728\u4e0a\u4f20\u7167\u7247...', 'info');
+      }
+      let photoKeys = [];
+      if (pendingPhotos.length > 0) {
+        const files = pendingPhotos.map(p => p.file);
+        const uploadRes = await api.uploadMultiplePhotos(files);
+        if (uploadRes.error) throw new Error(uploadRes.error);
+        photoKeys = Array.isArray(uploadRes.keys) ? uploadRes.keys : [];
+      }
 
       // 2. 閹绘劒姘︽禒璇插閿涘牅濞囬悽?photoKeys 閺佹壆绮嶉敍?
       toast('\u6b63\u5728\u63d0\u4ea4\u4efb\u52a1...', 'info');
       const submitRes = await api.post('/submissions', {
         taskId: submitTaskId,
-        photoKeys: uploadRes.keys,
+        photoKeys,
+        submissionText: normalizedText,
       });
       if (submitRes.error) throw new Error(submitRes.error);
 
@@ -1168,7 +1324,9 @@ export async function renderStudentTasks(container) {
       renderStudentTasks(container);
     } catch (err) {
       submitBtn.disabled = false;
-      submitBtn.innerHTML = `${icon('check', 16)} \u63d0\u4ea4 (${pendingPhotos.length}\u5f20)`;
+      submitBtn.innerHTML = `${icon('check', 16)} ${normalizedText
+        ? '\u63d0\u4ea4\u5185\u5bb9'
+        : `\u63d0\u4ea4 (${pendingPhotos.length}\u5f20)`}`;
       toast(err.message || '\u63d0\u4ea4\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5', 'error');
     }
   }
@@ -1232,6 +1390,9 @@ function renderStudentReviewRecords(records, expandedRecordId) {
                     <strong>\u539f\u56e0\uff1a</strong>${escapeHtml(reviewReason)}
                   </div>
                 ` : ''}
+                ${renderSubmissionTextBlock(submission.submissionText || submission.submission_text, {
+                  label: '\u6587\u5b57\u63d0\u4ea4',
+                })}
               </div>
 
               ${photoKeys.length ? `
