@@ -184,6 +184,128 @@ body:has(.photo-viewer-overlay[style*="display:flex"]) {
 }
 
 /* ── 底部导航 ── */
+.submission-text-card {
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    box-shadow: none;
+}
+
+.submission-text-inline {
+    min-width: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+}
+
+.submission-text-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+    font-size: 10px;
+    font-weight: var(--weight-semibold);
+    letter-spacing: 0.02em;
+    color: var(--color-text-secondary);
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+
+.submission-text-card.pending-tone .submission-text-label {
+    background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+    color: var(--color-warning);
+}
+
+.submission-text-card[data-expanded="true"] .submission-text-label {
+    background: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+    color: var(--color-text-secondary);
+}
+
+.submission-text-card.pending-tone[data-expanded="true"] .submission-text-label {
+    background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+    color: var(--color-warning);
+}
+
+.submission-text-shell {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    height: auto;
+    transition: height .3s cubic-bezier(.16, 1, .3, 1);
+    will-change: height;
+    padding-top: 1px;
+}
+
+.submission-text-body {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.submission-text-card.is-collapsible[data-expanded="false"] .submission-text-body {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    overflow: hidden;
+}
+
+.submission-text-toggle {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    margin-top: 1px;
+    border: none;
+    background: transparent;
+    color: var(--color-text-tertiary);
+    cursor: pointer;
+    border-radius: 999px;
+    transition:
+        color .2s ease,
+        background-color .2s ease;
+}
+
+.submission-text-toggle:hover,
+.submission-text-toggle:focus-visible {
+    color: var(--color-text-primary);
+    background: color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+}
+
+.submission-text-card.pending-tone .submission-text-toggle:hover,
+.submission-text-card.pending-tone .submission-text-toggle:focus-visible {
+    color: var(--color-warning);
+    background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+}
+
+.submission-text-toggle:focus-visible {
+    outline: none;
+}
+
+.submission-text-toggle-chevron {
+    width: 6px;
+    height: 6px;
+    border-right: 1.4px solid currentColor;
+    border-bottom: 1.4px solid currentColor;
+    transform: rotate(45deg) translateY(-1px);
+    transform-origin: center;
+    transition: transform .28s var(--ease-out);
+}
+
+.submission-text-card[data-expanded="true"] .submission-text-toggle-chevron {
+    transform: rotate(225deg) translateY(-1px);
+}
+
 .bottom-nav {
     position: fixed;
     bottom: 0;

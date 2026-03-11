@@ -11,6 +11,8 @@ import {
   parsePhotoKeys,
 } from '../utils/photo-retention.js';
 
+const MAX_SUBMISSION_TEXT_LENGTH = 1000;
+
 export async function handleSubmissions(request, env, user, path) {
   const method = request.method;
 
@@ -27,6 +29,22 @@ export async function handleSubmissions(request, env, user, path) {
   }
 
   return errorResponse('Not Found', 404, env);
+}
+
+function parseSubmissionText(raw) {
+  const text = String(raw || '')
+    .replace(/\r\n?/g, '\n')
+    .trim();
+
+  if (!text) {
+    return '';
+  }
+
+  if (text.length > MAX_SUBMISSION_TEXT_LENGTH) {
+    throw new Error(`提交文字不能超过 ${MAX_SUBMISSION_TEXT_LENGTH} 个字`);
+  }
+
+  return text;
 }
 
 async function listSubmissions(request, env, user) {
@@ -73,16 +91,38 @@ async function createSubmission(request, env, user) {
 
   const body = await request.json();
   const taskId = body.taskId;
+  let submissionText = '';
   let photoKeyValue = null;
 
+  try {
+    submissionText = parseSubmissionText(
+      body.submissionText ?? body.submission_text ?? body.text ?? ''
+    );
+  } catch (error) {
+    return errorResponse(error.message, 400, env);
+  }
+
   if (Array.isArray(body.photoKeys) && body.photoKeys.length > 0) {
-    photoKeyValue = JSON.stringify(body.photoKeys);
+    const normalizedPhotoKeys = body.photoKeys
+      .map((item) => String(item || '').trim())
+      .filter(Boolean);
+
+    if (normalizedPhotoKeys.length > 0) {
+      photoKeyValue = JSON.stringify(normalizedPhotoKeys);
+    }
   } else if (body.photoKey) {
-    photoKeyValue = body.photoKey;
+    const normalizedPhotoKey = String(body.photoKey).trim();
+    if (normalizedPhotoKey) {
+      photoKeyValue = normalizedPhotoKey;
+    }
   }
 
   if (!taskId) {
     return errorResponse('缺少任务 ID', 400, env);
+  }
+
+  if (!photoKeyValue && !submissionText) {
+    return errorResponse('请填写提交文字或上传照片', 400, env);
   }
 
   const task = await env.DB.prepare('SELECT * FROM tasks WHERE id = ?').bind(taskId).first();
@@ -110,6 +150,7 @@ async function createSubmission(request, env, user) {
     taskId,
     childId: user.id,
     photoKeyValue,
+    submissionText,
     now,
     window: submissionWindow,
   });
@@ -287,12 +328,13 @@ async function insertSubmissionIfWindowAvailable(db, {
   taskId,
   childId,
   photoKeyValue,
+  submissionText,
   now,
   window,
 }) {
   let sql = `
-    INSERT INTO submissions (id, task_id, child_id, status, photo_key, points, created_at)
-    SELECT ?, ?, ?, ?, ?, ?, ?
+    INSERT INTO submissions (id, task_id, child_id, status, photo_key, submission_text, points, created_at)
+    SELECT ?, ?, ?, ?, ?, ?, ?, ?
     WHERE NOT EXISTS (
       SELECT 1
         FROM submissions
@@ -307,6 +349,7 @@ async function insertSubmissionIfWindowAvailable(db, {
     childId,
     'pending',
     photoKeyValue,
+    submissionText,
     0,
     now,
     taskId,

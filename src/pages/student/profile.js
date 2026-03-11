@@ -13,6 +13,7 @@ import { api } from '../../utils/api.js';
 import { getPhoto } from '../../utils/camera.js';
 import { AVATAR_EMOJIS, sanitizeEmoji } from '../../utils/emoji.js';
 import { canPreviewReviewedSubmissionPhotos, getSubmissionPhotoKeys, getSubmissionPhotoState } from '../../utils/submission-photos.js';
+import { renderSubmissionTextBlock, setupSubmissionTextBlocks } from '../../utils/submission-text.js';
 import { escapeHtml } from '../../utils/escape.js';
 import {
   cancelExpandableAnimations,
@@ -408,6 +409,7 @@ export async function renderStudentProfile(container) {
     }, 400);
 
     bindEvents();
+    setupSubmissionTextBlocks(container);
     restoreExpandedReviewCards();
     showBottomNav('child', 'profile');
   }
@@ -511,6 +513,7 @@ export async function renderStudentProfile(container) {
       detail.style.transform = 'translateY(0)';
       detail.style.pointerEvents = 'auto';
       detail.style.maxHeight = 'none';
+      setupSubmissionTextBlocks(card);
       hydrateStudentPhotoCells(card);
     });
   }
@@ -521,6 +524,7 @@ export async function renderStudentProfile(container) {
 
     cancelExpandableAnimations(detail);
     detail.hidden = false;
+    setupSubmissionTextBlocks(card);
     const computed = window.getComputedStyle(detail);
     detail.style.maxHeight = `${detail.offsetHeight}px`;
     detail.style.paddingTop = computed.paddingTop === '0px' ? '0' : computed.paddingTop;
@@ -730,6 +734,9 @@ function renderReviewSection(submissions, expandedSubmissionId) {
                     <span>${escapeHtml(reviewMeta.reason)}</span>
                   </div>
                 ` : ''}
+                ${renderSubmissionTextBlock(submission.submissionText || submission.submission_text, {
+                  label: '文字提交',
+                })}
                 ${photoState === 'available' && photoKeys.length ? `
                   <div class="student-review-photo-strip" data-photo-keys='${JSON.stringify(photoKeys)}'>
                     ${photoKeys.map((key, index) => `

@@ -19,6 +19,68 @@ describe('submission routes', () => {
     verifyComplete();
   });
 
+  it('rejects submissions without text or photos', async () => {
+    const { env, calls, verifyComplete } = createEnv([]);
+
+    const response = await handleSubmissions(
+      new Request('https://example.com/api/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskId: 'task_1' }),
+      }),
+      env,
+      { role: 'child', id: 'child_1', familyCode: '888666' },
+      '/api/submissions',
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: expect.any(String) });
+    expect(calls).toEqual([]);
+    verifyComplete();
+  });
+
+  it('allows text-only submissions and stores normalized text', async () => {
+    const { env, verifyComplete } = createEnv([
+      {
+        method: 'first',
+        sqlIncludes: 'SELECT * FROM tasks WHERE id = ?',
+        result: {
+          id: 'task_1',
+          type: 'daily',
+          family_code: '888666',
+          target_child_id: null,
+        },
+      },
+      {
+        method: 'run',
+        sqlIncludes: ['INSERT INTO submissions', 'submission_text'],
+        assertArgs(args) {
+          expect(args[4]).toBe(null);
+          expect(args[5]).toBe('完成了口算练习\n并检查了错题');
+        },
+        result: { success: true, meta: { changes: 1 } },
+      },
+    ]);
+
+    const response = await handleSubmissions(
+      new Request('https://example.com/api/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          taskId: 'task_1',
+          submissionText: '  完成了口算练习\r\n并检查了错题  ',
+        }),
+      }),
+      env,
+      { role: 'child', id: 'child_1', familyCode: '888666' },
+      '/api/submissions',
+    );
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toEqual({ id: expect.any(String), status: 'pending' });
+    verifyComplete();
+  });
+
   it('atomically blocks duplicate submissions in the same window', async () => {
     const { env, verifyComplete } = createEnv([
       {

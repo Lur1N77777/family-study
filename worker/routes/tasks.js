@@ -316,7 +316,7 @@ async function loadSubmissionsForTasks(env, taskIds, childIds = []) {
   if (!taskIds.length) return [];
 
   const taskPlaceholders = taskIds.map(() => '?').join(', ');
-  let sql = `SELECT id, task_id, child_id, status, photo_key, points, reject_reason, created_at, reviewed_at
+  let sql = `SELECT id, task_id, child_id, status, photo_key, submission_text, points, reject_reason, created_at, reviewed_at
              FROM submissions
              WHERE task_id IN (${taskPlaceholders})`;
   const params = [...taskIds];

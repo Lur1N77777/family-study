@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS submissions (
   child_id TEXT NOT NULL,
   status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
   photo_key TEXT,
+  submission_text TEXT,
   photo_available_until INTEGER,
   photo_cleared_at INTEGER,
   points INTEGER DEFAULT 0,

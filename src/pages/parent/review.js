@@ -5,6 +5,7 @@ import { toast } from '../../utils/notification.js';
 import { staggerIn, haptic } from '../../utils/animations.js';
 import { getPhoto, parsePhotoKeys } from '../../utils/camera.js';
 import { canPreviewReviewedSubmissionPhotos, getSubmissionPhotoKeys, getSubmissionPhotoState } from '../../utils/submission-photos.js';
+import { renderSubmissionTextBlock, setupSubmissionTextBlocks } from '../../utils/submission-text.js';
 import { showBottomNav, refreshNavBadge } from '../../utils/nav.js';
 import { escapeHtml } from '../../utils/escape.js';
 import { enhanceSegmentedControls, runViewTransition } from '../../utils/segmented-control.js';
@@ -139,25 +140,40 @@ export async function renderParentReview(container) {
         .review-page { padding-bottom: calc(var(--nav-height-safe) + var(--space-6)); }
         .review-head { padding-bottom: var(--space-3); }
         .review-tabs { margin-bottom: var(--space-3); }
+        .review-tabs .tab {
+          min-height: 40px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+        }
+        .review-tabs .tab.active {
+          color: var(--color-text-primary);
+        }
+        .review-tabs .tab.active .tab-count {
+          background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+          color: var(--color-primary);
+        }
         .review-switch {
           display: inline-flex;
-          gap: 6px;
+          gap: 4px;
           padding: 4px;
           border-radius: 999px;
-          background: color-mix(in srgb, var(--color-text-primary) 5%, transparent);
+          background: var(--color-divider);
           margin-bottom: var(--space-3);
         }
         .review-switch-btn {
           border: none;
           background: transparent;
           color: var(--color-text-secondary);
-          padding: 9px 12px;
+          padding: 8px 12px;
           border-radius: 999px;
           display: inline-flex;
           align-items: center;
           gap: 6px;
           font-size: 12px;
           font-weight: var(--weight-semibold);
+          transition: all var(--duration-base) var(--ease-out);
         }
         .review-switch-btn span {
           min-width: 18px;
@@ -167,11 +183,11 @@ export async function renderParentReview(container) {
           align-items: center;
           justify-content: center;
           font-size: 10px;
-          background: color-mix(in srgb, var(--color-text-primary) 7%, transparent);
+          background: var(--color-divider);
         }
         .review-switch-btn.active {
           background: var(--color-surface);
-          color: var(--color-primary);
+          color: var(--color-text-primary);
           box-shadow: var(--shadow-sm);
         }
         .review-switch.segmented-enhanced .review-switch-btn.active {
@@ -179,7 +195,8 @@ export async function renderParentReview(container) {
           box-shadow: none;
         }
         .review-switch-btn.active span {
-          background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+          background: var(--color-primary-soft);
+          color: var(--color-primary);
         }
         .child-filter {
           display: flex;
@@ -221,8 +238,15 @@ export async function renderParentReview(container) {
         .record-card,
         .redemption-card {
           background: var(--color-surface);
-          border: 1px solid color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+          border: 1px solid color-mix(in srgb, var(--color-text-primary) 7%, transparent);
           box-shadow: var(--shadow-sm);
+          overflow: hidden;
+          transform: translateZ(0);
+          will-change: transform, box-shadow;
+          transition:
+            border-color .34s cubic-bezier(.16, 1, .3, 1),
+            box-shadow .34s cubic-bezier(.16, 1, .3, 1),
+            transform .34s cubic-bezier(.16, 1, .3, 1);
         }
         .review-card {
           border-radius: 22px;
@@ -234,7 +258,7 @@ export async function renderParentReview(container) {
           align-items: center;
           justify-content: space-between;
           gap: 12px;
-          margin-bottom: 10px;
+          margin-bottom: 12px;
         }
         .review-child-meta {
           display: flex;
@@ -273,12 +297,16 @@ export async function renderParentReview(container) {
           font-size: 12px;
           color: var(--color-primary);
           font-weight: var(--weight-semibold);
-          margin-bottom: 10px;
+          margin-bottom: 0;
+        }
+        .review-card .submission-text-card {
+          margin-top: 0;
         }
         .review-photos-grid {
           display: grid;
           gap: 8px;
-          margin-bottom: 12px;
+          margin-top: 12px;
+          margin-bottom: 0;
           border-radius: 16px;
           overflow: hidden;
         }
@@ -312,8 +340,12 @@ export async function renderParentReview(container) {
         .review-actions {
           display: flex;
           gap: 10px;
+          margin-top: 16px;
         }
-        .review-actions .btn { flex: 1; }
+        .review-actions .btn {
+          flex: 1;
+          min-height: 46px;
+        }
         .record-summary {
           display: grid;
           gap: 6px;
@@ -333,17 +365,13 @@ export async function renderParentReview(container) {
           gap: 10px;
         }
         .record-card {
-          border-radius: 20px;
-          padding: 13px 14px;
-          transition:
-            border-color var(--duration-fast) var(--ease-out),
-            box-shadow var(--duration-fast) var(--ease-out),
-            transform var(--duration-fast) var(--ease-out);
+          border-radius: 22px;
+          padding: 14px;
         }
         .record-card.expanded {
           border-color: color-mix(in srgb, var(--color-primary) 22%, transparent);
-          box-shadow: var(--shadow-md);
-          transform: translateY(-1px);
+          box-shadow: 0 22px 44px rgba(15, 23, 42, .1);
+          transform: translateY(-2px);
         }
         .record-head {
           display: flex;
@@ -379,26 +407,35 @@ export async function renderParentReview(container) {
           display: grid;
           gap: 6px;
         }
+        .record-card .submission-text-card {
+          margin-top: 0;
+        }
         .record-photo-toggle {
           display: inline-flex;
           align-items: center;
           gap: 6px;
+          height: 30px;
+          padding: 0 10px;
           border-radius: 999px;
-          padding: 6px 10px;
           font-size: 11px;
           font-weight: var(--weight-semibold);
           border: none;
-          background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-          color: var(--color-primary);
+          background: color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+          color: var(--color-text-secondary);
           white-space: nowrap;
           transition:
-            background var(--duration-fast) var(--ease-out),
-            color var(--duration-fast) var(--ease-out),
-            transform var(--duration-fast) var(--ease-out);
+            background .2s ease,
+            color .2s ease,
+            transform .34s cubic-bezier(.16, 1, .3, 1);
         }
         .record-photo-toggle:hover {
-          background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+          background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+          color: var(--color-primary);
           transform: translateY(-1px);
+        }
+        .record-photo-toggle.expanded {
+          background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+          color: var(--color-primary);
         }
         .record-photo-toggle-icon,
         .record-photo-toggle-arrow {
@@ -416,18 +453,21 @@ export async function renderParentReview(container) {
           max-height: 0;
           overflow: hidden;
           padding: 0 1px;
+          margin-top: 0;
           opacity: 0;
-          transform: translateY(-6px);
+          transform: translateY(-10px);
           pointer-events: none;
           transition:
-            max-height .34s cubic-bezier(0.4, 0, 0.2, 1),
-            padding-top .34s cubic-bezier(0.4, 0, 0.2, 1),
-            padding-bottom .34s cubic-bezier(0.4, 0, 0.2, 1),
-            opacity .22s ease,
-            transform .34s cubic-bezier(0.22, 1, 0.36, 1);
-          will-change: max-height, opacity, transform;
+            max-height .42s cubic-bezier(.16, 1, .3, 1),
+            padding-top .42s cubic-bezier(.16, 1, .3, 1),
+            padding-bottom .42s cubic-bezier(.16, 1, .3, 1),
+            margin-top .42s cubic-bezier(.16, 1, .3, 1),
+            opacity .24s ease,
+            transform .42s cubic-bezier(.16, 1, .3, 1);
+          will-change: max-height, opacity, transform, margin-top;
         }
         .record-card.expanded .record-photo-detail {
+          margin-top: 12px;
           opacity: 1;
           transform: translateY(0);
           pointer-events: auto;
@@ -482,9 +522,18 @@ export async function renderParentReview(container) {
           font-weight: var(--weight-semibold);
           flex-shrink: 0;
         }
-        .record-status-pill.pending { background: var(--color-warning-soft); color: var(--color-warning); }
-        .record-status-pill.approved { background: var(--color-success-soft); color: var(--color-success); }
-        .record-status-pill.rejected { background: var(--color-danger-soft); color: var(--color-danger); }
+        .record-status-pill.pending {
+          background: var(--color-warning-soft);
+          color: var(--color-warning);
+        }
+        .record-status-pill.approved {
+          background: var(--color-success-soft);
+          color: var(--color-success);
+        }
+        .record-status-pill.rejected {
+          background: var(--color-danger-soft);
+          color: var(--color-danger);
+        }
         .redemption-card {
           border-radius: 22px;
           padding: 14px;
@@ -513,6 +562,17 @@ export async function renderParentReview(container) {
           line-height: 1.5;
         }
         .review-modal { width: min(460px, calc(100vw - 24px)); }
+        .review-modal .input-group {
+          margin: var(--space-5) 0 0;
+        }
+        .review-modal .input {
+          min-height: 104px;
+        }
+        .reject-modal-actions {
+          display: flex;
+          gap: var(--space-3);
+          margin-top: var(--space-4);
+        }
         .photo-viewer-overlay {
           position: fixed;
           inset: 0;
@@ -593,6 +653,9 @@ export async function renderParentReview(container) {
           .review-card-header,
           .redemption-card { align-items: flex-start; }
           .review-card-header { flex-direction: column; }
+          .review-actions {
+            margin-top: 16px;
+          }
         }
       </style>
     `;
@@ -606,6 +669,7 @@ export async function renderParentReview(container) {
 
     enhanceSegmentedControls(container);
     bindEvents();
+    setupSubmissionTextBlocks(container);
     if (state.activeTab === 'tasks') {
       if (state.taskView === 'pending') {
         hydratePhotoCells('.review-photo-cell[data-photo-key]');
@@ -716,7 +780,7 @@ export async function renderParentReview(container) {
       <div class="input-group">
         <textarea class="input" id="reject-reason" rows="3" style="resize:none" placeholder="例如：照片不清晰，或者没有拍到完成结果"></textarea>
       </div>
-      <div style="display:flex;gap:var(--space-3)">
+      <div class="reject-modal-actions">
         <button class="btn btn-secondary btn-lg" style="flex:1" id="cancel-reject" type="button">取消</button>
         <button class="btn btn-danger btn-lg" style="flex:1" id="confirm-reject" type="button">确认驳回</button>
       </div>
@@ -831,6 +895,7 @@ export async function renderParentReview(container) {
       detail.style.pointerEvents = 'auto';
       detail.style.maxHeight = 'none';
       syncRecordToggle(card, true);
+      setupSubmissionTextBlocks(card);
       hydratePhotoCells(card, '.record-photo-cell[data-photo-key]');
     });
   }
@@ -862,6 +927,7 @@ export async function renderParentReview(container) {
 
     cancelExpandableAnimations(detail);
     detail.hidden = false;
+    setupSubmissionTextBlocks(card);
     const computed = window.getComputedStyle(detail);
     detail.style.maxHeight = `${detail.offsetHeight}px`;
     detail.style.paddingTop = computed.paddingTop === '0px' ? '0' : computed.paddingTop;
@@ -1077,6 +1143,10 @@ function renderPendingTaskReview(pending) {
 
         <div class="review-task-title">${escapeHtml(submission.taskTitle || '任务')}</div>
         <div class="review-task-points">+${submission.taskPoints || 0} 积分</div>
+        ${renderSubmissionTextBlock(submission.submissionText || submission.submission_text, {
+          label: '学生说明',
+          className: 'pending-tone',
+        })}
 
         ${photoCount ? `
           <div class="review-photos-grid ${gridClass}">
@@ -1165,6 +1235,9 @@ function renderSubmissionRecords(records, selectedChild, expandedRecordId) {
                   <span>${escapeHtml(reviewMeta.reason)}</span>
                 </div>
               ` : ''}
+              ${renderSubmissionTextBlock(submission.submissionText || submission.submission_text, {
+                label: '\u6587\u5b57\u63d0\u4ea4',
+              })}
             </div>
 
             ${photoState === 'available' ? `

@@ -19,6 +19,7 @@ function normalizeSubmission(item) {
         taskTitle: item.taskTitle || item.task_title || '',
         taskPoints: item.taskPoints ?? item.task_points ?? 0,
         photoKey: item.photoKey || item.photo_key || null,
+        submissionText: item.submissionText || item.submission_text || '',
         photoCount: item.photoCount ?? item.photo_count ?? 0,
         photoAccessStatus: item.photoAccessStatus || item.photo_access_status || 'none',
         photoAvailableUntil: item.photoAvailableUntil || item.photo_available_until || null,
@@ -221,8 +222,12 @@ class Store {
         return res;
     }
 
-    async submitTask(taskId, photoKey) {
-        const res = await api.post('/submissions', { taskId, photoKey });
+    async submitTask(taskId, payload = {}) {
+        const body = {
+            taskId,
+            ...payload,
+        };
+        const res = await api.post('/submissions', body);
         this.invalidateCaches(['submissions', 'tasks', 'activity']);
         this.emit('submissions');
         return res;
